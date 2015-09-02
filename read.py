@@ -1,14 +1,18 @@
 # coding: utf-8
 from sklearn.feature_extraction.text import CountVectorizer
-from nltk import WordNetLemmatizer
+from sklearn.ensemble import RandomForestClassifier
+# from nltk import WordNetLemmatizer
 from nltk.corpus import stopwords
 import pymorphy2
 import codecs
+
 
 # Should be added all characters
 punctuation_marks = ['.',',', ';',':', '(', ')']
 # Stopwords
 stop_words = stopwords.words('russian')
+
+train = ['Forbes','Forbes','Forbes', 'Mens-Health', 'Mens-Health', 'Mens-Health']
 
 # Function of normalization
 def toNormalForm(list):
@@ -43,22 +47,41 @@ morph = pymorphy2.MorphAnalyzer()
 
 # first_article = u'Это о технологиях и науке. Тут будет много предложений'
 # second_article = u'Это еще одни предложения для сравнения. Что-то нужно бы сделали еще бы'
-first = codecs.open('forbes_ru.txt', 'r',encoding = 'UTF-8')
-second = codecs.open('mens_health_ru.txt', 'r', encoding = 'UTF-8')
-first_article = fileToText(first)
-second_article = fileToText(second)
+train_files = ['forbes_ru.txt','f2.txt','f3.txt','mens_health_ru.txt','m2.txt','m3.txt']
+test_files = ['f_test.txt','m_test.txt']
 
-print(first_article)
-print second_article
-en_article = 'Hello, my name is Kirill. I live in NN'
 
-first_list_bow = toNormalForm(first_article)
-second_list_bow = toNormalForm(second_article)
+articles = []
+for name in train_files:
+    articles.append(fileToText(codecs.open( name, 'r',encoding = 'UTF-8')))
 
-list_for_comparison = first_list_bow + second_list_bow
+list_for_comparison = []
+for article in articles:
+    list_for_comparison += toNormalForm(article)
 
 train_data_features = vectorizer.fit_transform(list_for_comparison)
 train_data_features = train_data_features.toarray()
 
-print(train_data_features)
+# Random Forest
+forest = RandomForestClassifier(n_estimators=100)
+forest = forest.fit(train_data_features, train)
+
+# можно сделать функцией
+articles = []
+for name in test_files:
+    articles.append(fileToText(codecs.open(name, 'r',encoding = 'UTF-8')))
+
+list_for_comparison = []
+for article in articles:
+    list_for_comparison += toNormalForm(article)
+
+test_data_features = vectorizer.transform(list_for_comparison)
+test_data_features = test_data_features.toarray()
+
+result = forest.predict(test_data_features)
+
+print(result)
+
+
+
 
