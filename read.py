@@ -1,11 +1,14 @@
-# -*- coding: utf-8 -*-
+# coding: utf-8
 from sklearn.feature_extraction.text import CountVectorizer
 from nltk import WordNetLemmatizer
+from nltk.corpus import stopwords
 import pymorphy2
 import codecs
 
 # Should be added all characters
 punctuation_marks = ['.',',', ';',':', '(', ')']
+# Stopwords
+stop_words = stopwords.words('russian')
 
 # Function of normalization
 def toNormalForm(list):
@@ -30,10 +33,10 @@ def fileToText(file):
     return article
 # End of function
 
-vectorizer = CountVectorizer(analyzer = "word",   \
-                             tokenizer = None,    \
-                             preprocessor = None, \
-                             stop_words = None,   \
+vectorizer = CountVectorizer(analyzer = "word",
+                             tokenizer = None,
+                             preprocessor = None,
+                             stop_words = stop_words,
                              max_features = 5000)
 
 morph = pymorphy2.MorphAnalyzer()
