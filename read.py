@@ -49,11 +49,11 @@ morph = pymorphy2.MorphAnalyzer()
 # second_article = u'Это еще одни предложения для сравнения. Что-то нужно бы сделали еще бы'
 train_files = ['forbes_ru.txt','f2.txt','f3.txt','mens_health_ru.txt','m2.txt','m3.txt']
 test_files = ['f_test.txt','m_test.txt']
-
+path='texts\\'
 
 articles = []
 for name in train_files:
-    articles.append(fileToText(codecs.open( name, 'r',encoding = 'UTF-8')))
+    articles.append(fileToText(codecs.open( path+name, 'r',encoding = 'UTF-8')))
 
 list_for_comparison = []
 for article in articles:
@@ -69,7 +69,7 @@ forest = forest.fit(train_data_features, train)
 # можно сделать функцией
 articles = []
 for name in test_files:
-    articles.append(fileToText(codecs.open(name, 'r',encoding = 'UTF-8')))
+    articles.append(fileToText(codecs.open(path+name, 'r',encoding = 'UTF-8')))
 
 list_for_comparison = []
 for article in articles:
