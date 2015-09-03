@@ -78,7 +78,7 @@ class parse_arff:
         print(_file_train, _files_test)
         return _file_train, _files_test
 
-    def exec(self):
+    def execQuantRCV1(self):
         train_file, test_files=self.read_dir('QuantRCV1/')# QuantOHSUMED 11286# QuantRCV1 21610
         arff=self.read_arff(train_file)
         csr, y=self.make_csr(arff, 21610)
@@ -86,9 +86,21 @@ class parse_arff:
 
         arff1=self.read_arff(test_files[0])
         csr1, y1=self.make_csr(arff1, 21610)
-        pr= self.model.predict(csr1)
+        pr= model.predict(csr1)
+        for st in pr:
+            print(st)
+
+    def execQuantOHSUMED(self):
+        train_file, test_files=self.read_dir('QuantOHSUMED/')# QuantOHSUMED 11286# QuantRCV1 21610
+        arff=self.read_arff(train_file)
+        csr, y=self.make_csr(arff, 11286)
+        model=self.fit(csr,y)
+
+        arff1=self.read_arff(test_files[0])
+        csr1, y1=self.make_csr(arff1, 11286)
+        pr= model.predict(csr1)
         for st in pr:
             print(st)
 
 pa=parse_arff()
-pa.exec()
+pa.execQuantOHSUMED()
