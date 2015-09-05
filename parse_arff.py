@@ -2,7 +2,7 @@
 __author__ = 'Nikolay Karpov'
 
 import pyparsing as p
-import os
+import os, pickle
 from sklearn.svm import LinearSVC, SVC
 from sklearn.multiclass import OneVsRestClassifier as mc
 from sklearn.multiclass import OneVsOneClassifier
@@ -63,12 +63,16 @@ class parse_arff:
                     _data.append(_pair[1])
                     _i += 1
             _indptr.append(_i)
+            #make matrix like _classes_bin=mb().fit_transform(_classes)
             _line=[0 for i in range(_class_num)]
             for _it in _class:
                 _line[_it-_feature_num-1]=1
             _classes_bin.append(_line)
-        #_classes_bin=mb().fit_transform(_classes)
-        return csr_matrix((_data, _indices, _indptr),shape=[len(_classes_bin), _feature_num],dtype=float), csr_matrix(_classes_bin)#.toarray()
+        #make class names
+        _ident=_input.identifiers[_feature_num+1:]
+        #make scr_matrix
+        _scr=csr_matrix((_data, _indices, _indptr),shape=[len(_classes_bin), _feature_num],dtype=float)
+        return [_scr, csr_matrix(_classes_bin), _ident]
 
     def make_binary(self, _input_y, _num=0):
         _y=[]
@@ -105,31 +109,40 @@ class parse_arff:
 
     def fit(self, _input_X, _input_y):
         #classif=LR( )
-        classif = mc(SGDC())
+        classif = mc(SVC(kernel='linear'))#rbf poly sigmoid
         model=classif.fit(_input_X, _input_y)
         return model
 
     def execQuantRCV1(self):# QuantRCV1 21610 99
         train_file, test_files=self.read_dir('QuantRCV1/')
         arff=self.read_arff(train_file)
-        csr, y=self.make_csr(arff, 21610, 99)
+        [csr, y, y_names]=self.make_csr(arff, 21610, 99)
+        with open('pickle_'+train_file+'.pickle', 'wb') as f:
+            pickle.dump([csr, y, y_names], f)
         model=self.fit(csr,y)
 
-        arff1=self.read_arff(test_files[0])
-        csr1, y1=self.make_csr(arff1, 21610, 99)
-        pr= model.predict(csr1)
-        print(metrics.classification_report(y1, pr))
+        for test_file in test_files:
+            arff1=self.read_arff(test_file)
+            [csr1, y1, y1_names]=self.make_csr(arff1, 21610, 99)
+            with open('pickle_'+test_file+'.pickle', 'wb') as f:
+                pickle.dump([csr1, y1, y1_names], f)
+            pr= model.predict(csr1)
+            print(metrics.classification_report(y1, pr))
 
     def execQuantOHSUMED(self):# QuantOHSUMED 11286 88
         train_file, test_files=self.read_dir('QuantOHSUMED/')
         arff=self.read_arff(train_file)
-        csr, y=self.make_csr(arff, 11286, 88)
+        [csr, y, y_names]=self.make_csr(arff, 11286, 88)
+        with open('pickle_'+train_file+'.pickle', 'wb') as f:
+            pickle.dump([csr, y, y_names], f)
         model=self.fit(csr,y)
 
-        arff1=self.read_arff(test_files[1])
-        csr1, y1=self.make_csr(arff1, 11286, 88)
-        pr_y1= model.predict(csr1)
-        print(metrics.classification_report(y1,pr_y1))
-        #print('precision_recall_fscore_support', metrics.precision_recall_fscore_support(y1,pr_y1))
-pa=parse_arff()
-pa.execQuantRCV1()
+        for test_file in test_files:
+            arff1=self.read_arff(test_file)
+            [csr1, y1, y1_names]=self.make_csr(arff1, 11286, 88)
+            with open('pickle_'+test_file+'.pickle', 'wb') as f:
+                pickle.dump([csr1, y1, y1_names], f)
+            pr_y1= model.predict(csr1)
+            print(metrics.classification_report(y1,pr_y1))
+#pa=parse_arff()
+#pa.execQuantRCV1()
