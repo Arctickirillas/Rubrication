@@ -3,10 +3,13 @@ __author__ = 'Nikolay Karpov'
 
 import pyparsing as p
 import os
-from sklearn.svm import SVC
+from sklearn.svm import LinearSVC, SVC
 from sklearn.multiclass import OneVsRestClassifier as mc
-from sklearn.linear_model import SGDClassifier as sgdc
+from sklearn.multiclass import OneVsOneClassifier
+from sklearn.linear_model import SGDClassifier as SGDC
+from sklearn.linear_model import LogisticRegression as LR
 from sklearn.preprocessing import MultiLabelBinarizer as mb
+from sklearn import metrics
 from scipy.sparse import csr_matrix
 
 class parse_arff:
@@ -39,14 +42,15 @@ class parse_arff:
         featureNames=tokens.arffdata.identifiers
         return (tokens.arffdata)
 
-    def make_csr(self, _input, _feature_num=11286): #11286 21609
+    def make_csr(self, _input, _feature_num=11286, _class_num=88): # QuantOHSUMED 11286 88 # QuantRCV1 21610 99
         _indptr = [0]
         _indices = []
         _data = []
         _data_names=[]
-        _classes=[]
+        _classes_bin=[]
+        _i=0
+        _a0=[0 for i in range(_class_num)]
         for _element in _input.dataList:
-            _indptr.append(len(_element)-2)
             _class=[]
             for _pair in _element:
                 if _pair[0]==0:
@@ -57,14 +61,35 @@ class parse_arff:
                 else:
                     _indices.append(_pair[0]-1)
                     _data.append(_pair[1])
-            _classes.append(_class)
-        _classes_bin=mb().fit_transform(_classes)
-        return csr_matrix((_data, _indices, _indptr),shape=[len(_classes), _feature_num],dtype=float), _classes_bin#.toarray()
+                    _i += 1
+            _indptr.append(_i)
+            _line=[0 for i in range(_class_num)]
+            for _it in _class:
+                _line[_it-_feature_num-1]=1
+            _classes_bin.append(_line)
+        #_classes_bin=mb().fit_transform(_classes)
+        return csr_matrix((_data, _indices, _indptr),shape=[len(_classes_bin), _feature_num],dtype=float), csr_matrix(_classes_bin)#.toarray()
 
-    def fit(self, _input_X, _input_y):
-        classif = mc(sgdc())
-        model=classif.fit(_input_X, _input_y)
-        return model
+    def make_binary(self, _input_y, _num=0):
+        _y=[]
+        _i=0
+        for _line in _input_y:
+            if _line[_num]==1:
+                _y.append(1)
+                _i += 1
+            else:
+                _y.append(-1)
+        return _y
+
+    def make_dat_file(self, _input_X, _y):
+        _i=0
+        for _index in _y:
+            _str='%d' %_index
+            #for _doc in _input_X.getrow(_i):
+                #print(_doc)
+            #print(_str)
+            _i=_i+1
+        return 0
 
     def read_dir(self, _path):
         _files_test=[]
@@ -78,29 +103,33 @@ class parse_arff:
         print(_file_train, _files_test)
         return _file_train, _files_test
 
-    def execQuantRCV1(self):
-        train_file, test_files=self.read_dir('QuantRCV1/')# QuantOHSUMED 11286# QuantRCV1 21610
+    def fit(self, _input_X, _input_y):
+        #classif=LR( )
+        classif = mc(SGDC())
+        model=classif.fit(_input_X, _input_y)
+        return model
+
+    def execQuantRCV1(self):# QuantRCV1 21610 99
+        train_file, test_files=self.read_dir('QuantRCV1/')
         arff=self.read_arff(train_file)
-        csr, y=self.make_csr(arff, 21610)
+        csr, y=self.make_csr(arff, 21610, 99)
         model=self.fit(csr,y)
 
         arff1=self.read_arff(test_files[0])
-        csr1, y1=self.make_csr(arff1, 21610)
+        csr1, y1=self.make_csr(arff1, 21610, 99)
         pr= model.predict(csr1)
-        for st in pr:
-            print(st)
+        print(metrics.classification_report(y1, pr))
 
-    def execQuantOHSUMED(self):
-        train_file, test_files=self.read_dir('QuantOHSUMED/')# QuantOHSUMED 11286# QuantRCV1 21610
+    def execQuantOHSUMED(self):# QuantOHSUMED 11286 88
+        train_file, test_files=self.read_dir('QuantOHSUMED/')
         arff=self.read_arff(train_file)
-        csr, y=self.make_csr(arff, 11286)
+        csr, y=self.make_csr(arff, 11286, 88)
         model=self.fit(csr,y)
 
-        arff1=self.read_arff(test_files[0])
-        csr1, y1=self.make_csr(arff1, 11286)
-        pr= model.predict(csr1)
-        for st in pr:
-            print(st)
-
+        arff1=self.read_arff(test_files[1])
+        csr1, y1=self.make_csr(arff1, 11286, 88)
+        pr_y1= model.predict(csr1)
+        print(metrics.classification_report(y1,pr_y1))
+        #print('precision_recall_fscore_support', metrics.precision_recall_fscore_support(y1,pr_y1))
 pa=parse_arff()
-pa.execQuantOHSUMED()
+pa.execQuantRCV1()
