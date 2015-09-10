@@ -101,10 +101,10 @@ class parse_arff:
         _list_dir=os.listdir(_path)
         for _file in _list_dir:
             if _file.find('train')>0:
-                _file_train=_path+_file
+                _file_train=_path+'/'+_file
             elif _file.find('test')>0:
-                _files_test.append(_path+_file)
-        print(_file_train, _files_test)
+                _files_test.append(_path+'/'+_file)
+        #print(_file_train, _files_test)
         return _file_train, _files_test
 
     def fit(self, _input_X, _input_y):
@@ -122,6 +122,7 @@ class parse_arff:
         model=self.fit(csr,y)
 
         for test_file in test_files:
+            print(test_file)
             arff1=self.read_arff(test_file)
             [csr1, y1, y1_names]=self.make_csr(arff1, 21610, 99)
             with open('pickle_'+test_file+'.pickle', 'wb') as f:
