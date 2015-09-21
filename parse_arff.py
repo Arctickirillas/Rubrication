@@ -109,7 +109,7 @@ class parse_arff:
 
     def fit(self, _input_X, _input_y):
         #classif=LR( )
-        classif = mc(SVC(kernel='linear'))#rbf poly sigmoid
+        classif = mc(SVC(kernel='linear', probability=True))#rbf poly sigmoid
         model=classif.fit(_input_X, _input_y)
         return model
 
