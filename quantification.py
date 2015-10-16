@@ -18,7 +18,7 @@ class Quantification:
         self.arff=parse_arff()
         self.dir_name=_dir_name
         self.method_prev=self.bin_prevalence#.bin_prevalence or .multi_prevalence
-        self._train_file, self._test_files=self.arff.read_dir(_dir_name)
+        self._train_file, self._test_files=self.arff.read_dir(self.prefix+'pickle_'+_dir_name)
 
     def kld(self, p, q):
         """Kullback-Leibler divergence D(P || Q) for discrete distributions when Q is used to approximate P
@@ -129,18 +129,17 @@ class Quantification:
         return data
 
     def estimate_cl_indexes(self):#pickle_QuantRCV1
-        _train_file, _test_files=self.arff.read_dir(self.dir_name)
-        [_csr, _y, y_names]=self._read_pickle(_train_file)
+        [_csr, _y, y_names]=self._read_pickle(self._train_file)
         #_prev_train=self.count_prevalence(_y)
         model=self.arff.fit(_csr,_y)
         _pr_list=[]
         _y1_list=[]
-        for _test_file in _test_files:
+        for _test_file in self._test_files:
             [_csr1, _y1, _y1_names] = self._read_pickle(_test_file)
             _y1_list.append(_y1)
             _pr_list.append(model.predict(_csr1))
-        with open(self.prefix+'cl_indexes_'+self.dir_name.lstrip('texts/pickle_'), 'wb') as f:
-            print(self.prefix+'cl_indexes_'+self.dir_name.lstrip('texts/pickle_'))
+        with open(self.prefix+'cl_indexes_'+self.dir_name+'.pickle', 'wb') as f:
+            print(self.prefix+'cl_indexes_'+self.dir_name+'.pickle')
             pickle.dump([_y, _y1_list, _pr_list, _test_files, y_names], f)
             f.close()
         names_ = [_y, _y1_list, _pr_list, _test_files, y_names]
@@ -198,10 +197,10 @@ class Quantification:
         print('\t\t\t\t VLD \t\t\t\t LD \t\t\t\t HD \t\t\t\t VHD \t\t\t\t total \n', _kld_D)
         return 0
 
-    def read_cl_prob(self):
+    def unite_cl_prob(self):
         #read probabilities from separate files and aggregate it to one file
         [_csr, _y, y_names]=self._read_pickle(self._train_file)
-        _train_file, _test_files=self.arff.read_dir(self.prefix+'cl_prob_'+self.dir_name.lstrip(self.prefix+'pickle_'))
+        _train_file, _test_files=self.arff.read_dir(self.prefix+'cl_prob_'+self.dir_name)
         _prob_list=[]
         for _test_file in _test_files:
             with open(_test_file, 'rb') as f:
@@ -212,7 +211,7 @@ class Quantification:
         for _test_file1 in self._test_files:
             [_csr1, _y1, _y1_names] = self._read_pickle(_test_file1)
             _y1_list.append(_y1)
-        with open('texts/cl_prob_'+self.dir_name.lstrip('texts/pickle_')+'.pickle', 'wb') as f:
+        with open('texts/cl_prob_'+self.dir_name+'.pickle', 'wb') as f:
             pickle.dump([_y, _y1_list, _prob_list, self._test_files, _y1_names], f)
             f.close()
         return [_y, _y1_list, _prob_list, self._test_files, _y1_names]
@@ -221,10 +220,10 @@ class Quantification:
         #[_csr, _y, y_names]=self._read_pickle(self._train_file)
         #_prev_train=self.count_prevalence(_y)
         #model=self.arff.fit(_csr,_y)
-        #with open('texts/ml_model_'+self.dir_name.lstrip('texts/pickle_')+'.pickle', 'wb') as f:
+        #with open('texts/ml_model_'+self.dir_name+'.pickle', 'wb') as f:
         #    pickle.dump(model, f)
         #    f.close()
-        with open('texts/ml_model_'+self.dir_name.lstrip('texts/pickle_')+'.pickle', 'rb') as f:
+        with open('texts/ml_model_'+self.dir_name+'.pickle', 'rb') as f:
             model = pickle.load(f)
             f.close()
         _prob_list=[]
@@ -238,7 +237,7 @@ class Quantification:
             with open('texts/cl_prob_'+_test_file.rstrip('.arff.pickle').lstrip('texts/pickle_')+'.cl_prob', 'wb') as f:
                 pickle.dump(_prob, f)
                 f.close()
-        with open('texts/cl_prob_'+self.dir_name.lstrip('texts/pickle_')+'.pickle', 'wb') as f:
+        with open('texts/cl_prob_'+self.dir_name+'.pickle', 'wb') as f:
             pickle.dump([_y, _y1_list, _prob_list, self._test_files, _y1_names], f)
             f.close()
         return [_y, _y1_list, _prob_list, self._test_files, y_names]
@@ -339,7 +338,7 @@ class Quantification:
                 [tp_av, fp_av] = pickle.load(f)
         except:
             [tp_av, fp_av]=self._kfold_tp_fp(10)
-        [tp_av, fp_av]=self._kfold_tp_fp(10)
+        #[tp_av, fp_av]=self._kfold_tp_fp(10)
         pred_all=[]
         test_all=[]
         j=0
@@ -353,18 +352,19 @@ class Quantification:
         print('pred_all',pred_all)
         return pred_all
 
-name='texts/pickle_QuantOHSUMED' #pickle_QuantRCV1 #pickle_QuantOHSUMED
+name='QuantOHSUMED' #QuantRCV1 #QuantOHSUMED
 q=Quantification(name)
 #indexes=q.estimate_cl_indexes()
-#indexes=q._read_pickle('texts/cl_indexes_'+name.lstrip('texts/pickle_'))
+indexes=q._read_pickle('texts/cl_indexes_'+name+'.pickle')
+td=q.classify_and_count(indexes[1])
 #ed1=q.classify_and_count(indexes[2])
+#ed2=q.adj_classify_and_count(indexes)
 
 #q.estimate_cl_prob()
-#q.read_cl_prob()
-prob=q._read_pickle('texts/cl_prob_'+name.lstrip('texts/pickle_')+'.pickle')
-td=q.classify_and_count(prob[1])
-#ed2=q.classify_and_count(prob[2], is_prob=True)
-#ed3=q.expectation_maximization(prob)
-ed4=q.prob_classify_and_count(prob)
-#ed=q.adj_classify_and_count(indexes)
-q.count_diff(td,ed4)
+#q.unite_cl_prob()
+prob=q._read_pickle('texts/cl_prob_'+name+'.pickle')
+
+#ed3=q.classify_and_count(prob[2], is_prob=True)
+#ed4=q.expectation_maximization(prob)
+#ed5=q.prob_classify_and_count(prob)
+q.count_diff(td,ed1)
