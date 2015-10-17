@@ -1,8 +1,8 @@
-# Quantifiacation 
+# Quantification 
 
 Download datasets http://hlt.isti.cnr.it/quantification/
 
-To convert ARFF datasets to Python:
+#To convert ARFF datasets to Python:
 
 from parse_arff import Parse_ARFF
 
@@ -13,7 +13,7 @@ pa.convert_arff_and_predict_proba(QuantOHSUMED)
 pa.convert_arff_and_predict_proba(QuantRCV1)
 
 
-To count Quantifiacation score:
+#To count Quantifiacation score:
 
 from quantification import Quantification
 
