@@ -1,6 +1,8 @@
 # Quantification 
 
-Download datasets http://hlt.isti.cnr.it/quantification/
+Download parse_arff.py and quantification.py
+
+Download RCV1 and OHSUMED corps split for quantification experiments  http://hlt.isti.cnr.it/quantification/ in ARFF format to ./texts/QuantRCV1 and ./texts/QuantOHSUMED directories respectively.
 
 #To convert ARFF datasets to Python:
 
