@@ -13,12 +13,12 @@ from sklearn.svm import LinearSVC, SVC
 from scipy import stats
 
 class Quantification:
-    def __init__(self, _dir_name):
+    def __init__(self, dir_name):
         self.prefix='texts/'
         self.arff=Parse_ARFF()
-        self.dir_name=_dir_name
+        self.dir_name=dir_name
         self.method_prev=self.bin_prevalence#.bin_prevalence or .multi_prevalence
-        self._train_file, self._test_files=self.arff.read_dir(self.prefix+'pickle_'+_dir_name)
+        self._train_file, self._test_files=self.arff.read_dir(self.prefix+'pickle_'+dir_name)
 
     def kld(self, p, q):
         """Kullback-Leibler divergence D(P || Q) for discrete distributions when Q is used to approximate P
@@ -257,7 +257,7 @@ class Quantification:
                 avr_prob.append(np.average(cl_row))
         return avr_prob
 
-    def expectation_maximization(self, _indexes):
+    def expectation_maximization(self, _indexes, stop_delta=0.1):
         [_y_train, _y_test_list, _pred_prob_list, _test_files, y_names]=_indexes
         #print(_pred_prob_list[0][1])
         pr_train=self.bin_prevalence(_y_train)
@@ -272,10 +272,10 @@ class Quantification:
 
             _prob=_pred_prob.T
             for cl_n in range(len(pr_train)):#Category
-                print('Test file N %s, class number %s' %(_test_num, cl_n))
+                #print('Test file N %s, class number %s' %(_test_num, cl_n))
                 iter=0
                 _delta=1
-                while _delta>0.01:#0.00000000000000001:
+                while _delta>stop_delta:#0.00000000000000001:
                     pr_c_x=[]
                     _j=0
                     for pr_c_xk in _prob[cl_n]:#xk in category
@@ -297,7 +297,6 @@ class Quantification:
             _test_num+=1
         #for _j in range(len(test_prevalence)):
         #    print(test_prevalence[_j], pr_all[_j], pr_train[(_j % 88)],  _j)
-        print(num_iter)
         return pr_all ,num_iter
 
     def __conditional_probability(self,p1,p2,val1,val2):
@@ -361,20 +360,24 @@ class Quantification:
         print('pred_all',pred_all)
         return pred_all
 
-name='QuantOHSUMED' #QuantRCV1 #QuantOHSUMED
-q=Quantification(name)
-#indexes=q.estimate_cl_indexes()
-indexes=q._read_pickle('texts/cl_indexes_'+name+'.pickle')
-td=q.classify_and_count(indexes[1])
-#ed1=q.classify_and_count(indexes[2])
-#ed2=q.adj_classify_and_count(indexes)
+    def process_pipeline(self):
+        #Warning! Processing can take a long time. We recommend to perform it step by step
+        #pa=Parse_ARFF()
+        #pa.convert_arff_and_predict_proba(QuantOHSUMED, is_predict=False)
+        #q=Quantification('QuantOHSUMED')
+        #q.process_pipeline()
+        #####################################################
+        indexes=self.estimate_cl_indexes()
+        indexes=self._read_pickle('texts/cl_indexes_'+self.dir_name+'.pickle')
+        td=self.classify_and_count(indexes[1])
+        ed1=self.classify_and_count(indexes[2])
+        ed2=self.adj_classify_and_count(indexes)
 
-#q.estimate_cl_prob()
-#q.unite_cl_prob()
-prob=q._read_pickle('texts/cl_prob_'+name+'.pickle')
-
-#ed3=q.classify_and_count(prob[2], is_prob=True)
-#ed4=q.prob_classify_and_count(prob)
-ed5, num_iter=q.expectation_maximization(prob)
-
-q.count_diff1(td,ed5, num_iter)
+        self.estimate_cl_prob()
+        self.unite_cl_prob()
+        prob=self._read_pickle('texts/cl_prob_'+self.dir_name+'.pickle')
+        ed3=self.classify_and_count(prob[2], is_prob=True)
+        ed4=self.prob_classify_and_count(prob)
+        ed5, num_iter=self.expectation_maximization(prob, 0.1)
+        self.count_diff(td,ed4)
+        self.count_diff1(td,ed5, num_iter)

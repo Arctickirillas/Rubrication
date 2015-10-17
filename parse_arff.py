@@ -113,7 +113,7 @@ class Parse_ARFF:
         model=classif.fit(_input_X, _input_y)
         return model
 
-    def convert_arff_and_predict_proba(self, dir_name='QuantOHSUMED'):
+    def convert_arff_and_predict_proba(self, dir_name='QuantOHSUMED', is_predict=False):
             # Read ARFF files;
             # serialize data to pickle format;
             # learn ML model predict probabilities and serialize results to pickle format
@@ -129,7 +129,8 @@ class Parse_ARFF:
         with open('texts/pickle_'+train_file+'.pickle', 'wb') as f:
             pickle.dump([csr, y, y_names], f)
             f.close()
-        #model=self.fit(csr,y)
+        if is_predict:
+            model=self.fit(csr,y)
         prob_list=[]
         y1_list=[]
         for test_file in test_files:
@@ -139,16 +140,18 @@ class Parse_ARFF:
                 pickle.dump([csr1, y1, y1_names], f)
                 f.close()
             print('texts/pickle_'+test_file+'.pickle')
-            #prob_y1= model.predict_proba(csr1)
-            #print(metrics.classification_report(y1,pr_y1))
-            #prob_list.append(prob_y1)
-            #y1_list.append(y1)
-            #with open('texts/'+test_file+'.cl_prob', 'wb') as f:
-            #    pickle.dump(prob_y1, f)
-            #    f.close()
-        #with open('texts/'+dir_name+'/all_cl_prob.pickle', 'wb') as f:
-        #    pickle.dump([y, y1_list, prob_list, test_files, y_names], f)
-        #    f.close()
+            if is_predict:
+                prob_y1= model.predict_proba(csr1)
+                print(metrics.classification_report(y1,pr_y1))
+                prob_list.append(prob_y1)
+                y1_list.append(y1)
+                with open('texts/cl_prob_'+test_file+'.cl_prob', 'wb') as f:
+                    pickle.dump(prob_y1, f)
+                    f.close()
+        if is_predict:
+            with open('texts/cl_prob_'+dir_name+'.pickle', 'wb') as f:
+                pickle.dump([y, y1_list, prob_list, test_files, y_names], f)
+                f.close()
         return 0
 #pa=Parse_ARFF()
-#pa.convert_arff_and_predict_proba()#'QuantRCV1')
+#pa.convert_arff_and_predict_proba('QuantOHSUMED') # 'QuantRCV1'

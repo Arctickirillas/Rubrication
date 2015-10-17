@@ -10,12 +10,18 @@ from parse_arff import Parse_ARFF
 
 pa=Parse_ARFF()
 
-pa.convert_arff_and_predict_proba(QuantOHSUMED)
+pa.convert_arff_and_predict_proba(QuantOHSUMED, is_predict=False)
 
-pa.convert_arff_and_predict_proba(QuantRCV1)
-
+pa.convert_arff_and_predict_proba(QuantRCV1, is_predict=False)
 
 #To count Quantifiacation score:
+##Warning! Processing can take a long time. We recommend to perform it step by step
+
+q=Quantification('QuantOHSUMED')
+
+q.process_pipeline()
+
+#To count Quantifiacation score step by step:
 
 from quantification import Quantification
 
