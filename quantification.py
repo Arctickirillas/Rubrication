@@ -1,7 +1,7 @@
 # coding: utf-8
 __author__ = 'Nikolay Karpov'
 
-from parse_arff import parse_arff
+from parse_arff import Parse_ARFF
 import pickle
 import numpy as np
 import operator
@@ -15,7 +15,7 @@ from scipy import stats
 class Quantification:
     def __init__(self, _dir_name):
         self.prefix='texts/'
-        self.arff=parse_arff()
+        self.arff=Parse_ARFF()
         self.dir_name=_dir_name
         self.method_prev=self.bin_prevalence#.bin_prevalence or .multi_prevalence
         self._train_file, self._test_files=self.arff.read_dir(self.prefix+'pickle_'+_dir_name)
@@ -175,7 +175,7 @@ class Quantification:
                 _prev_test=np.concatenate((_prev_test,self.bin_prevalence(_y_test)), axis=1)
         return _prev_test
 
-    def count_diff1(self, _prev_test, _prev_test_estimate):
+    def count_diff1(self, _prev_test, _prev_test_estimate, _num_iter):
         _parts_P=self.split_by_prevalence()
         _parts_D=self.split_by_distribution_drift()
         kld_bin=self.kld_bin(_prev_test, _prev_test_estimate)
@@ -185,6 +185,12 @@ class Quantification:
         print('\t\t\t VLD \t\t\t LD \t\t\t HD \t\t\t VHD \t\t\t total')
         print(np.average(self.subset(kld_bin, _parts_D[1])), np.average(self.subset(kld_bin,_parts_D[2])),\
         np.average(self.subset(kld_bin,_parts_D[3])), np.average(self.subset(kld_bin,_parts_D[4])), np.average(kld_bin))
+        print('\t\t\t VLP \t\t\t LP \t\t\t HP \t\t\t VHP \t\t\t total')
+        print(np.average(self.subset(_num_iter, _parts_P[1])), np.average(self.subset(_num_iter,_parts_P[2])),\
+        np.average(self.subset(_num_iter,_parts_P[3])), np.average(self.subset(_num_iter,_parts_P[4])), np.average(_num_iter))
+        print('\t\t\t VLD \t\t\t LD \t\t\t HD \t\t\t VHD \t\t\t total')
+        print(np.average(self.subset(_num_iter, _parts_D[1])), np.average(self.subset(_num_iter,_parts_D[2])),\
+        np.average(self.subset(_num_iter,_parts_D[3])), np.average(self.subset(_num_iter,_parts_D[4])), np.average(_num_iter))
         return 0
 
     def count_diff(self, _prev_test, _prev_test_estimate):
@@ -257,6 +263,7 @@ class Quantification:
         pr_train=self.bin_prevalence(_y_train)
         pr_all=[]
         test_prevalence=[]
+        num_iter=[]
         _test_num=0#0..3 len(_y_test_list)
         for _pred_prob in _pred_prob_list:# Test files loop
             print('Test file N', _test_num)
@@ -266,6 +273,7 @@ class Quantification:
             _prob=_pred_prob.T
             for cl_n in range(len(pr_train)):#Category
                 print('Test file N %s, class number %s' %(_test_num, cl_n))
+                iter=0
                 _delta=1
                 while _delta>0.01:#0.00000000000000001:
                     pr_c_x=[]
@@ -279,17 +287,18 @@ class Quantification:
                 #Step M
                     pr_c_new=np.average(pr_c_x)#np.average(_prob[cl_n])
                     _delta=np.abs(pr_c_new-pr_c[cl_n])
-                    #if cl_n==77 and _test_num==3: print(pr_c[cl_n], pr_c_new, test_prevalence[cl_n*(_test_num+1)], _delta)
-                    print(pr_c[cl_n],pr_c_new, test_prevalence[cl_n*(_test_num+1)], _delta)
+                    #print(pr_c[cl_n],pr_c_new, test_prevalence[cl_n*(_test_num+1)], _delta)
                     #pr_train[cl_n]=pr_c[cl_n]
                     #_prob[cl_n]=pr_c_x_k
                     pr_c[cl_n]=pr_c_new
-
+                    iter+= 1
+                num_iter.append(iter)
             pr_all=np.concatenate((pr_all,pr_c), axis=1)
             _test_num+=1
         #for _j in range(len(test_prevalence)):
         #    print(test_prevalence[_j], pr_all[_j], pr_train[(_j % 88)],  _j)
-        return pr_all
+        print(num_iter)
+        return pr_all ,num_iter
 
     def __conditional_probability(self,p1,p2,val1,val2):
         _c=0
@@ -365,6 +374,7 @@ td=q.classify_and_count(indexes[1])
 prob=q._read_pickle('texts/cl_prob_'+name+'.pickle')
 
 #ed3=q.classify_and_count(prob[2], is_prob=True)
-#ed4=q.expectation_maximization(prob)
-#ed5=q.prob_classify_and_count(prob)
-q.count_diff(td,ed1)
+#ed4=q.prob_classify_and_count(prob)
+ed5, num_iter=q.expectation_maximization(prob)
+
+q.count_diff1(td,ed5, num_iter)

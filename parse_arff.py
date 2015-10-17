@@ -12,7 +12,7 @@ from sklearn.preprocessing import MultiLabelBinarizer as mb
 from sklearn import metrics
 from scipy.sparse import csr_matrix
 
-class parse_arff:
+class Parse_ARFF:
     def __init__(self):
         pass
 
@@ -150,5 +150,5 @@ class parse_arff:
         #    pickle.dump([y, y1_list, prob_list, test_files, y_names], f)
         #    f.close()
         return 0
-#pa=parse_arff()
+#pa=Parse_ARFF()
 #pa.convert_arff_and_predict_proba()#'QuantRCV1')
