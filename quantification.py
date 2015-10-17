@@ -234,7 +234,7 @@ class Quantification:
             f.close()
         _prob_list=[]
         _y1_list=[]
-        for _t in range(42,52):#len(self._test_files)):
+        for _t in range(len(self._test_files)):# range(42,52):
             _test_file=self._test_files[_t]
             [_csr1, _y1, _y1_names] = self._read_pickle(_test_file)
             _y1_list.append(_y1)
@@ -363,7 +363,7 @@ class Quantification:
     def process_pipeline(self):
         #Warning! Processing can take a long time. We recommend to perform it step by step
         #pa=Parse_ARFF()
-        #pa.convert_arff_and_predict_proba(QuantOHSUMED, is_predict=False)
+        #pa.convert_arff(QuantOHSUMED, is_predict=False)
         #q=Quantification('QuantOHSUMED')
         #q.process_pipeline()
         #####################################################

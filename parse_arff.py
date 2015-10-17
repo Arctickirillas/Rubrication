@@ -113,7 +113,7 @@ class Parse_ARFF:
         model=classif.fit(_input_X, _input_y)
         return model
 
-    def convert_arff_and_predict_proba(self, dir_name='QuantOHSUMED', is_predict=False):
+    def convert_arff(self, dir_name='QuantOHSUMED', is_predict=False):
             # Read ARFF files;
             # serialize data to pickle format;
             # learn ML model predict probabilities and serialize results to pickle format
@@ -154,4 +154,4 @@ class Parse_ARFF:
                 f.close()
         return 0
 #pa=Parse_ARFF()
-#pa.convert_arff_and_predict_proba('QuantOHSUMED') # 'QuantRCV1'
+#pa.convert_arff('QuantOHSUMED') # 'QuantRCV1'
