@@ -144,5 +144,6 @@ class parse_arff:
                 pickle.dump([csr1, y1, y1_names], f)
             pr_y1= model.predict(csr1)
             print(metrics.classification_report(y1,pr_y1))
-#pa=parse_arff()
-#pa.execQuantRCV1()
+pa=parse_arff()
+# pa.execQuantRCV1()
+pa.execQuantOHSUMED()
