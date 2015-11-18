@@ -12,7 +12,7 @@ from sklearn.preprocessing import MultiLabelBinarizer as mb
 from sklearn import metrics
 from scipy.sparse import csr_matrix
 
-class parse_arff:
+class Parse_ARFF:
     def __init__(self):
         pass
 
@@ -101,31 +101,44 @@ class parse_arff:
         _list_dir=os.listdir(_path)
         for _file in _list_dir:
             if _file.find('train')>0:
-                _file_train=_path+_file
+                _file_train=_path+'/'+_file
             elif _file.find('test')>0:
-                _files_test.append(_path+_file)
-        print(_file_train, _files_test)
+                _files_test.append(_path+'/'+_file)
+        #print(_file_train, _files_test)
         return _file_train, _files_test
 
     def fit(self, _input_X, _input_y):
         #classif=LR( )
-        classif = mc(SVC(kernel='linear'))#rbf poly sigmoid
+        classif = mc(SVC(kernel='linear', probability=True))#rbf poly sigmoid
         model=classif.fit(_input_X, _input_y)
         return model
 
-    def execQuantRCV1(self):# QuantRCV1 21610 99
-        train_file, test_files=self.read_dir('QuantRCV1/')
+    def convert_arff(self, dir_name='QuantOHSUMED', is_predict=False):
+            # Read ARFF files;
+            # serialize data to pickle format;
+            # learn ML model predict probabilities and serialize results to pickle format
+        if dir_name=='QuantOHSUMED':# QuantOHSUMED num_of_feat=11286 num_of_classes=88
+            num_of_feat=11286
+            num_of_classes=88
+        elif dir_name=='QuantRCV1':# QuantRCV1 num_of_feat=21610 num_of_classes=99
+            num_of_feat=21610
+            num_of_classes=99
+        train_file, test_files=self.read_dir(dir_name)
         arff=self.read_arff(train_file)
-        [csr, y, y_names]=self.make_csr(arff, 21610, 99)
-        with open('pickle_'+train_file+'.pickle', 'wb') as f:
+        [csr, y, y_names]=self.make_csr(arff, num_of_feat, num_of_classes)
+        with open('texts/pickle_'+train_file+'.pickle', 'wb') as f:
             pickle.dump([csr, y, y_names], f)
-        model=self.fit(csr,y)
-
+            f.close()
+        if is_predict:
+            model=self.fit(csr,y)
+        prob_list=[]
+        y1_list=[]
         for test_file in test_files:
             arff1=self.read_arff(test_file)
-            [csr1, y1, y1_names]=self.make_csr(arff1, 21610, 99)
-            with open('pickle_'+test_file+'.pickle', 'wb') as f:
+            [csr1, y1, y1_names]=self.make_csr(arff1, num_of_feat, num_of_classes)
+            with open('texts/pickle_'+test_file+'.pickle', 'wb') as f:
                 pickle.dump([csr1, y1, y1_names], f)
+<<<<<<< HEAD
             pr= model.predict(csr1)
             print(metrics.classification_report(y1, pr))
 
@@ -147,3 +160,22 @@ class parse_arff:
 pa=parse_arff()
 # pa.execQuantRCV1()
 pa.execQuantOHSUMED()
+=======
+                f.close()
+            print('texts/pickle_'+test_file+'.pickle')
+            if is_predict:
+                prob_y1= model.predict_proba(csr1)
+                print(metrics.classification_report(y1,pr_y1))
+                prob_list.append(prob_y1)
+                y1_list.append(y1)
+                with open('texts/cl_prob_'+test_file+'.cl_prob', 'wb') as f:
+                    pickle.dump(prob_y1, f)
+                    f.close()
+        if is_predict:
+            with open('texts/cl_prob_'+dir_name+'.pickle', 'wb') as f:
+                pickle.dump([y, y1_list, prob_list, test_files, y_names], f)
+                f.close()
+        return 0
+#pa=Parse_ARFF()
+#pa.convert_arff('QuantOHSUMED') # 'QuantRCV1'
+>>>>>>> origin/master
