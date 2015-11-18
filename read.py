@@ -14,6 +14,9 @@ from sklearn.svm import SVC
 from sklearn.multiclass import OneVsRestClassifier as mc
 from sklearn import metrics
 
+#
+testF = open('test.txt', 'w')
+
 # Load From Dump
 # f=open('dump','rb')
 # res = p.load(f)
@@ -35,6 +38,7 @@ def examleOfRubrication():
         list_for_comparison = []
         for article in articles:
             list_for_comparison += toNormalForm(article)
+        print list_for_comparison
 
         type_data_features = vectorizer.fit_transform(list_for_comparison)
         type_data_features = type_data_features.toarray()
@@ -104,13 +108,18 @@ def toVectorize():
 def randomForest(trained,predicted,test):
     random_forest = RandomForestClassifier(n_estimators=100)
     random_forest = random_forest.fit(trained, predicted)
-    return random_forest.predict(test)
+    return random_forest.predict(test),random_forest.predict_proba(test)
 
 # SVM For Multi Class
 def multiClassSVM(trained,predicted,test):
     svm = mc(SVC(kernel='linear', probability=True)) # for multi classes
     svm = svm.fit(trained,predicted)
     return svm.predict(test)
+
+def simpleSVM(trained,predicted,test,max_iter):
+    svm = SVC(kernel='linear', probability=True, max_iter=max_iter) # for multi classes
+    svm = svm.fit(trained,predicted)
+    return svm.predict(test),svm.predict_proba(test)
 
 # Obtaining Train Data From Dump
 file = open('pickle_QuantOHSUMED/quant_OHSUMED_train.arff.pickle','rb')
@@ -122,6 +131,54 @@ trained = pickle_file[0]
 predicted = pickle_file[1]
 class_name = pickle_file[2]
 
+myPred = predicted.toarray()
+
+# Train.dat
+# for i in range(2510):
+#             for j in range(1):
+#                 if myPred[i][j] == 1:
+#                     train.write('1 ')
+#                     arrPr = trained[i].toarray()
+#                     for m in range(len(arrPr[0])):
+#                         if arrPr[0][m]!=0:
+#                             train.write(str(m+1)+':'+str(arrPr[0][m])+' ')
+#                     train.write('\n')
+# for i in range(2510):
+#             for j in range(1,88):
+#                 if myPred[i][j] != 1:
+#                     train.write('-1 ')
+#                     arrPr = trained[i].toarray()
+#                     for m in range(len(arrPr[0])):
+#                         if arrPr[0][m]!=0:
+#                             train.write(str(m+1)+':'+str(arrPr[0][m])+' ')
+#                     train.write('\n')
+#             print i
+
+
+def obtainTrain(myPred):
+    for j in range(88):
+        train = open('dat/train'+str(j)+'.txt', 'w')
+        for i in range(2510):
+                if myPred[i][j] == 1:
+                    train.write('1 ')
+                    arrPr = trained[i].toarray()
+                    for m in range(len(arrPr[0])):
+                        if arrPr[0][m]!=0:
+                            train.write(str(m+1)+':'+str(arrPr[0][m])+' ')
+                    train.write('\n')
+                else:
+                    train.write('-1 ')
+                    arrPr = trained[i].toarray()
+                    for m in range(len(arrPr[0])):
+                        if arrPr[0][m]!=0:
+                            train.write(str(m+1)+':'+str(arrPr[0][m])+' ')
+                    train.write('\n')
+        print j
+        train.close()
+
+
+
+
 # MultiLabelBinarizer().fit_transform(pr)
 
 # Obtaining Test Data From Dump
@@ -131,6 +188,30 @@ file.close()
 
 test = pickle_file[0]
 test_labels = pickle_file[1]
+
+myPred = test_labels.toarray()
+# Test.dat
+# for i in range(3207):
+#             for j in range(1):
+#                 if myPred[i][j] == 1:
+#                     testF.write('+1 ')
+#                     arrPr = test[i].toarray()
+#                     for m in range(len(arrPr[0])):
+#                         if arrPr[0][m]!=0:
+#                             testF.write(str(m+1)+':'+str(arrPr[0][m])+' ')
+#                     testF.write('\n')
+#
+# for i in range(3207):
+#             for j in range(1,88):
+#                 if myPred[i][j] != 1:
+#                     testF.write('-1 ')
+#                     arrPr = test[i].toarray()
+#                     for m in range(len(arrPr[0])):
+#                         if arrPr[0][m]!=0:
+#                             testF.write(str(m+1)+':'+str(arrPr[0][m])+' ')
+#                     testF.write('\n')
+#             print i
+
 
 # result = svm.predict(test) #0 .85      0.57      0.66      6124
 
@@ -143,4 +224,7 @@ test_labels = pickle_file[1]
 
 
 # examleOfRubrication()
-print multiClassSVM(trained,predicted,test)
+# # print multiClassSVM(trained,predicted,test)
+# # print  trained
+#
+# obtainTrain(myPred)
