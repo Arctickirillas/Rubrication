@@ -48,11 +48,35 @@ def classifyAndCount(predicted, probability = []):
                 probQuantity[j] = probQuantity[j]/2510
         print probQuantity
 
+def CCforDouble(predicted, probability = []):
+    quantityNeg, quantityPos = 0.,0.
+    probQuantityNeg = 0.0
+    probQuantityPos = 0.0
+    if len(probability) == 0:
+        print 'Classify And Count:'
+        for i in range(len(predicted)):
+            if str(predicted[i]) == 'negative':
+                quantityNeg += 1
+            elif str(predicted[i]) == 'positive':
+                quantityPos += 1
+        quantityNeg = quantityNeg/len(predicted)
+        quantityPos = quantityPos/len(predicted)
+        print quantityPos,quantityNeg
+    else:
+        print 'Probabilistic Classify And Count :'
+        for i in range(len(predicted)):
+            if predicted[i] == 'negative':
+                    probQuantityNeg += probability[i]
+            elif predicted[i] == 'positive':
+                    probQuantityPos += probability[i]
+        probQuantityNeg = probQuantityNeg/len(predicted)
+        probQuantityPos = probQuantityPos/len(predicted)
+        print probQuantityPos,probQuantityNeg
 
-classifyAndCount(predicted)
-classifyAndCount(predicted,prob)
-
-quit()
+# classifyAndCount(predicted)
+# classifyAndCount(predicted,prob)
+#
+# quit()
 
 
 
