@@ -138,29 +138,6 @@ class Parse_ARFF:
             [csr1, y1, y1_names]=self.make_csr(arff1, num_of_feat, num_of_classes)
             with open('texts/pickle_'+test_file+'.pickle', 'wb') as f:
                 pickle.dump([csr1, y1, y1_names], f)
-<<<<<<< HEAD
-            pr= model.predict(csr1)
-            print(metrics.classification_report(y1, pr))
-
-    def execQuantOHSUMED(self):# QuantOHSUMED 11286 88
-        train_file, test_files=self.read_dir('QuantOHSUMED/')
-        arff=self.read_arff(train_file)
-        [csr, y, y_names]=self.make_csr(arff, 11286, 88)
-        with open('pickle_'+train_file+'.pickle', 'wb') as f:
-            pickle.dump([csr, y, y_names], f)
-        model=self.fit(csr,y)
-
-        for test_file in test_files:
-            arff1=self.read_arff(test_file)
-            [csr1, y1, y1_names]=self.make_csr(arff1, 11286, 88)
-            with open('pickle_'+test_file+'.pickle', 'wb') as f:
-                pickle.dump([csr1, y1, y1_names], f)
-            pr_y1= model.predict(csr1)
-            print(metrics.classification_report(y1,pr_y1))
-pa=parse_arff()
-# pa.execQuantRCV1()
-pa.execQuantOHSUMED()
-=======
                 f.close()
             print('texts/pickle_'+test_file+'.pickle')
             if is_predict:
@@ -178,4 +155,3 @@ pa.execQuantOHSUMED()
         return 0
 #pa=Parse_ARFF()
 #pa.convert_arff('QuantOHSUMED') # 'QuantRCV1'
->>>>>>> origin/master
