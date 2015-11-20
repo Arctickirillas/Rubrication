@@ -53,12 +53,14 @@ def prepocess():
     return X, labels
 
 def quantify(X,y):
-    q=Quantification(method='CC')
-    q.fit(X,y)
-    prev_pred=q.predict(X)
-    print('prev_pred',prev_pred)
-    avg_KLD=q.score([X], [y])
-    print('avg_KLD',avg_KLD)
+    q=Quantification(method='PCC')
+    kf=KFold(y.shape[0],n_folds=2)
+    for train_index, test_index in kf:
+        q.fit(X[train_index],y[train_index])
+        prev_pred=q.predict(X[test_index])
+        print('prev_pred',prev_pred)
+        avg_KLD=q.score([X[test_index]], [y[test_index]])
+        print('avg_KLD',avg_KLD)
     return avg_KLD
 
 X,y=prepocess()

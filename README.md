@@ -1,12 +1,15 @@
 # Quantification 
 ##Install
+
 Download parse_arff.py and quantification.py
 
 #To count quantifiacation score:
 
 q=Quantification(method='CC')
-	
-q.fit(X,y)
+
+Parameter method: string, optional (default='CC'). It must be one of ‘CC’, ‘PCC’, ‘EM’.
+
+q.fit(X, y)
 	
 prev_pred=q.predict(X)
 	

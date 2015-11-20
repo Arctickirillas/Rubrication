@@ -18,15 +18,44 @@ class Quantification:
     def __init__(self, method='test', dir_name='temp'):
         self.prefix='texts/'
         self.arff=Parse_ARFF()
-        self.model=SVC(kernel='linear', probability=True)
         self.dir_name=dir_name
         self.method_prev=self._bin_prevalence#.bin_prevalence or .multi_prevalence
-        if method=='CC':
-            self.quant_method=self._classify_and_count
-        elif method=='PCC':
-            self.quant_method=self._prob_classify_and_count
-        elif method=='test':
+        self.method=method
+        if self.method=='CC':
+            self.model=SVC(kernel='linear')
+        elif self.method=='PCC' or self.method=='EM':
+            self.model=SVC(kernel='linear', probability=True)
+        elif self.method=='test':
             self._train_file, self._test_files=self.arff.read_dir(self.prefix+'pickle_'+dir_name)
+
+    def fit(self, X, y):
+        self.model.fit(X, y)
+        self.y_train=csr_matrix(MultiLabelBinarizer().fit_transform([[y_p] for y_p in y]))
+        return self.model
+
+    def predict(self, X):
+        if self.method=='CC':
+            y_pred=self.model.predict(X)
+            y=csr_matrix(MultiLabelBinarizer().fit_transform([[y_p] for y_p in y_pred]))
+            prevalence=self._classify_and_count([y])
+        elif self.method=='PCC':
+            prob_pred=self.model.predict_proba(X)
+            prevalence=self._prob_classify_and_count([prob_pred])
+        elif self.method=='EM':
+            prob_pred=self.model.predict_proba(X)
+            prevalence=self._expectation_maximization(self.y_train, [prob_pred], stop_delta=0.01)
+        return prevalence
+
+    def score(self, list_of_X, list_of_y):
+        list_of_y_true=[]
+        prev_pred=[]
+        for X ,y in zip(list_of_X, list_of_y):
+            prev_pred=np.concatenate((prev_pred,self.predict(X)))
+            list_of_y_true.append(csr_matrix(MultiLabelBinarizer().fit_transform([[y_] for y_ in y])))
+        prev_true=self._classify_and_count(list_of_y_true)
+        scores=self._kld_bin(prev_true, prev_pred)
+        #print('prev_true=',prev_true,' prev_pred=',prev_pred)
+        return np.average(scores)
 
     def _kld(self, p, q):
         """Kullback-Leibler divergence D(P || Q) for discrete distributions when Q is used to approximate P
@@ -153,27 +182,6 @@ class Quantification:
         names_ = [_y, _y1_list, _pr_list, _test_files, y_names]
         return names_
 
-    def fit(self, X, y):
-        self.model.fit(X, y)
-        return self.model
-
-    def predict(self, X):
-        y_pred=self.model.predict(X)
-        y=csr_matrix(MultiLabelBinarizer().fit_transform([[y_p] for y_p in y_pred]))
-        prevalence=self.quant_method([y])
-        return prevalence
-
-    def score(self, list_of_X, list_of_y):
-        list_of_y_true=[]
-        prev_pred=[]
-        for X ,y in zip(list_of_X, list_of_y):
-            prev_pred=np.concatenate((prev_pred,self.predict(X)))
-            list_of_y_true.append(csr_matrix(MultiLabelBinarizer().fit_transform([[y_] for y_ in y])))
-        prev_true=self._classify_and_count(list_of_y_true)
-        scores=self._kld_bin(prev_true, prev_pred)
-        #print('prev_true=',prev_true,' prev_pred=',prev_pred)
-        return np.average(scores)
-
     def __subset(self, _inp_set, _indexes):
         _sub_set=[]
         for _i in _indexes:
@@ -280,8 +288,8 @@ class Quantification:
             f.close()
         return [_y, _y1_list, _prob_list, self._test_files, y_names]
 
-    def _prob_classify_and_count(self, _indexes):
-        [_y_train, _y_test_list, _pred_prob_list, _test_files, y_names]=_indexes
+    def _prob_classify_and_count(self, _pred_prob_list):#_indexes
+        #[_y_train, _y_test_list, _pred_prob_list, _test_files, y_names]=_indexes
         avr_prob=[]
         for _pred_prob in _pred_prob_list:
             _prob=_pred_prob.T
@@ -289,17 +297,17 @@ class Quantification:
                 avr_prob.append(np.average(cl_row))
         return avr_prob
 
-    def _expectation_maximization(self, _indexes, stop_delta=0.1):
-        [_y_train, _y_test_list, _pred_prob_list, _test_files, y_names]=_indexes
+    def _expectation_maximization(self, _y_train, _pred_prob_list, stop_delta=0.1):#_indexes
+        #[_y_train, _y_test_list, _pred_prob_list, _test_files, y_names]=_indexes
         #print(_pred_prob_list[0][1])
         pr_train=self._bin_prevalence(_y_train)
         pr_all=[]
-        test_prevalence=[]
+        #test_prevalence=[]
         num_iter=[]
         _test_num=0#0..3 len(_y_test_list)
         for _pred_prob in _pred_prob_list:# Test files loop
             print('Test file N', _test_num)
-            test_prevalence=np.concatenate((test_prevalence,self._bin_prevalence(_y_test_list[_test_num])), axis=1)
+            #test_prevalence=np.concatenate((test_prevalence,self._bin_prevalence(_y_test_list[_test_num])), axis=1)
             pr_c=[x for x in pr_train]
 
             _prob=_pred_prob.T
@@ -405,17 +413,17 @@ class Quantification:
         #q=Quantification('QuantOHSUMED')
         #q.process_pipeline()
         #####################################################
-        indexes=self.estimate_cl_indexes()
+        indexes=self._estimate_cl_indexes()
         indexes=self._read_pickle('texts/cl_indexes_'+self.dir_name+'.pickle')
-        td=self.classify_and_count(indexes[1])
-        ed1=self.classify_and_count(indexes[2])
-        ed2=self.adj_classify_and_count(indexes)
+        td=self._classify_and_count(indexes[1])
+        ed1=self._classify_and_count(indexes[2])
+        ed2=self._adj_classify_and_count(indexes)
 
-        self.estimate_cl_prob()
-        self.unite_cl_prob()
+        self._estimate_cl_prob()
+        self._unite_cl_prob()
         prob=self._read_pickle('texts/cl_prob_'+self.dir_name+'.pickle')
-        ed3=self.classify_and_count(prob[2], is_prob=True)
-        ed4=self.prob_classify_and_count(prob)
-        ed5, num_iter=self.expectation_maximization(prob, 0.1)
-        self.count_diff(td,ed4)
-        self.count_diff1(td,ed5, num_iter)
+        ed3=self._classify_and_count(prob[2], is_prob=True)
+        ed4=self._prob_classify_and_count(prob[2])
+        ed5, num_iter=self._expectation_maximization(prob[0],prob[2], 0.1)
+        self._count_diff(td,ed4)
+        self._count_diff1(td,ed5, num_iter)
