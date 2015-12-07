@@ -15,19 +15,24 @@ Parameter X: Training set X
 
 Parameter y: Training labels y
 
-##prev_pred=q.predict(X, method='CC')
+##q.predict(X, method='CC')
 
-Parameter X: Training set X
+Parameter X: Test feature vector X
 
-Parameter method: string, optional (default value from __init__). It must be one of 'CC', 'ACC', 'PCC', 'EM', 'EM1', ''.
+Parameter method: string, optional (default value from constructor). It must be one of 'CC', 'ACC', 'PCC', 'EM', 'EM1', ''.
 
-##avg_KLD=q.score(list_of_X, list_of_y, method='CC')
+Returns predicted prevalence.
 
-Parameter list_of_X: [X]
+##q.score(list_of_X, list_of_y, method='CC')
 
-Parameter list_of_y: [y]
+Parameter list_of_X: Test set of feature vectors [X1, X2]
 
-Parameter method: string, optional (default value from __init__). It must be one of 'CC', 'ACC', 'PCC', 'EM', 'EM1', ''.
+Parameter list_of_y: Test set of original labels [y1, y2]
+
+Returns average over test sets value of Kullback-Leibler divergences between original and predicted prevalences.
+np.average([KLD(pr_orig_1,pr_pred_1),KLD(pr_orig_2,pr_pred_2)])
+
+Parameter method: string, optional (default value from constructor). It must be one of 'CC', 'ACC', 'PCC', 'EM', 'EM1', ''.
 
 
 #Install dataset RCV1 and OHSUMED
