@@ -16,19 +16,19 @@ from scipy import stats
 from scipy.sparse import csr_matrix
 
 class Quantification:
-    def __init__(self, method='test', dir_name='temp'):
+    def __init__(self, method='', dir_name='temp'):
         self.prefix='texts/'
         self.arff=Parse_ARFF()
         self.dir_name=dir_name
         self.method_prev=self._bin_prevalence#._bin_prevalence or ._multi_prevalence
         self.method=method
-        if self.method=='CC' or self.method=='ACC':
-            self.model=mc(SVC(kernel='linear'))
-        elif self.method=='PCC' or self.method=='EM' or self.method=='EM1':
-            self.model=mc(SVC(kernel='linear', probability=True))
+        self.model=mc(SVC(kernel='linear', probability=True))
+        if self.method=='PCC' or self.method=='EM' or self.method=='EM1' or self.method=='CC' or self.method=='ACC':
+            pass
         elif self.method=='test':
-            self.model=mc(SVC(kernel='linear', probability=True))
             self._train_file, self._test_files=self.arff.read_dir(self.prefix+'pickle_'+dir_name)
+        elif self.method=='':
+            self.method=='CC'
 
     def fit(self, X, y):
         self.model.fit(X, y)
@@ -36,35 +36,36 @@ class Quantification:
         self.X_train=X
         return self.model
 
-    def predict(self, X):
+    def predict(self, X, method=''):
+        if method!='':
+            self.method=method
         if self.method=='CC':
             y_pred=self.model.predict(X)
             prevalence=self._classify_and_count([y_pred])
         elif self.method=='ACC':
             y_pred=self.model.predict(X)
-            #y=csr_matrix(MultiLabelBinarizer().fit_transform([[y_p] for y_p in y_pred]))
             prevalence=self._adj_classify_and_count(self.X_train, self.y_train, [y_pred])
         elif self.method=='PCC':
             prob_pred=self.model.predict_proba(X)
             prevalence=self._prob_classify_and_count([prob_pred])
         elif self.method=='EM':
             prob_pred=self.model.predict_proba(X)
-            prevalence=self._expectation_maximization(self.y_train, [prob_pred], stop_delta=0.1)
+            prevalence=self._expectation_maximization(self.y_train, [prob_pred], stop_delta=0.00001)
         elif self.method=='EM1':
             prob_pred=self.model.predict_proba(X)
-            prevalence=self._exp_max(self.y_train, [prob_pred], stop_delta=0.001)
+            prevalence=self._exp_max(self.y_train, [prob_pred], stop_delta=0.00001)
         elif self.method=='test':
             self._process_pipeline()
         return prevalence
 
-    def score(self, list_of_X, list_of_y):
+    def score(self, list_of_X, list_of_y, method=''):
         list_of_y_true=[]
         prev_pred=[]
         for X ,y in zip(list_of_X, list_of_y):
-            prev_pred=np.concatenate((prev_pred,self.predict(X)))
+            prev_pred=np.concatenate((prev_pred,self.predict(X,method)))
             list_of_y_true.append(y)#csr_matrix(MultiLabelBinarizer().fit_transform([[y_] for y_ in y])))
         prev_true=self._classify_and_count(list_of_y_true)
-        scores=self._kld_bin(prev_true, prev_pred)
+        scores=self._divergence_bin(prev_true, prev_pred)
         #print('prev_true=',prev_true,' prev_pred=',prev_pred)
         return np.average(scores)
 
@@ -80,14 +81,15 @@ class Quantification:
     def _rae(self, p, q):
         p = np.asarray(p, dtype=np.float)
         q = np.asarray(q, dtype=np.float)
-        return np.where(p != 0,np.abs(q-p)/p, 0)
+        return np.sum(np.where(p != 0,np.abs(q-p)/p, 0))
 
-    def _kld_bin(self,p,q):
+    def _divergence_bin(self,p,q,func=''):
+        if func=='':func=self._kld
         p = np.asarray(p, dtype=np.float)
         q = np.asarray(q, dtype=np.float)
         klds=[]
         for _i in range(len(p)):
-            klds.append(self._kld([p[_i],1-p[_i]], [q[_i],1-q[_i]]))
+            klds.append(func([p[_i],1-p[_i]], [q[_i],1-q[_i]]))
         #print(len(_klds))
         #_avg=np.average(_klds)
         return klds#_avg
@@ -228,16 +230,16 @@ class Quantification:
         return _sub_set
 
     def __count_splited_KLD(self, _part, _prev_test, _prev_test_estimate):
-        split_by=[np.average(self._kld_bin(self.__subset(_prev_test,_part[1]), self.__subset(_prev_test_estimate,_part[1]))),
-        np.average(self._kld_bin(self.__subset(_prev_test,_part[2]), self.__subset(_prev_test_estimate,_part[2]))),
-        np.average(self._kld_bin(self.__subset(_prev_test,_part[3]), self.__subset(_prev_test_estimate,_part[3]))),
-        np.average(self._kld_bin(self.__subset(_prev_test,_part[4]), self.__subset(_prev_test_estimate,_part[4]))),
-        np.average(self._kld_bin(_prev_test, _prev_test_estimate))]
+        split_by=[np.average(self._divergence_bin(self.__subset(_prev_test,_part[1]), self.__subset(_prev_test_estimate,_part[1]))),
+        np.average(self._divergence_bin(self.__subset(_prev_test,_part[2]), self.__subset(_prev_test_estimate,_part[2]))),
+        np.average(self._divergence_bin(self.__subset(_prev_test,_part[3]), self.__subset(_prev_test_estimate,_part[3]))),
+        np.average(self._divergence_bin(self.__subset(_prev_test,_part[4]), self.__subset(_prev_test_estimate,_part[4]))),
+        np.average(self._divergence_bin(_prev_test, _prev_test_estimate))]
         return split_by
 
     def __count_ttest(self, _prev_test, _prev_test_estimate1, _prev_test_estimate2):
-        _kld_1=self.kld_bin(_prev_test, _prev_test_estimate1)
-        _kld_2=self.kld_bin(_prev_test, _prev_test_estimate2)
+        _kld_1=self._divergence_bin(_prev_test, _prev_test_estimate1)
+        _kld_2=self._divergence_bin(_prev_test, _prev_test_estimate2)
         tt=stats.ttest_rel(_kld_1, _kld_2)
         return tt
 
@@ -253,7 +255,7 @@ class Quantification:
     def _count_diff1(self, _prev_test, _prev_test_estimate, _num_iter):
         _parts_P=self.__split_by_prevalence()
         _parts_D=self.__split_by_distribution_drift()
-        kld_bin=self._kld_bin(_prev_test, _prev_test_estimate)
+        kld_bin=self._divergence_bin(_prev_test, _prev_test_estimate)
         print('\t\t\t VLP \t\t\t LP \t\t\t HP \t\t\t VHP \t\t\t total')
         print(np.average(self.__subset(kld_bin, _parts_P[1])), np.average(self.__subset(kld_bin,_parts_P[2])),\
         np.average(self.__subset(kld_bin,_parts_P[3])), np.average(self.__subset(kld_bin,_parts_P[4])), np.average(kld_bin))
@@ -330,6 +332,7 @@ class Quantification:
         avr_prob=[]
         for pred_prob in pred_prob_list:
             avr_prob=np.concatenate((avr_prob,np.average(pred_prob, axis=0)))
+        #print('PCC',avr_prob)
         return avr_prob
 
     def _exp_max(self, y_train, pred_prob_list, stop_delta=0.1):
@@ -338,18 +341,25 @@ class Quantification:
         for pred_prob in pred_prob_list:
             #print('pred_prob')
             pr_s=pr_train.copy()
+            print('pr_s',pr_s)
             prob_t=pred_prob.T
             prob_t_s =prob_t.copy()
             delta=1
-            while delta>stop_delta:
+            delta_s=1
+            while delta>stop_delta and delta<=delta_s:
                 for cl_n in range(len(pr_train)):#Category
                     prob_t_s[cl_n]=prob_t[cl_n].copy()*(pr_s[cl_n]/pr_train[cl_n])  #E step
                 prob_t_s=normalize(prob_t_s, norm='l1',axis=0)                      #E step
                 pr_s1=np.average(prob_t_s, axis=1)                                  #M step
-                print('pr_s1',pr_s1)
-                delta=np.max(np.abs(pr_s1-pr_s))
+                #delta=np.max(np.abs(pr_s1-pr_s))
+                delta_s=delta
+                delta=self._rae(pr_s,pr_s1)
+                print('pr_s1',pr_s1, delta)
+                #print(prob_t_s)
+                #pr_train=pr_s.copy()
+                #prob_t=prob_t_s.copy()
                 pr_s=pr_s1.copy()
-            pr_all=np.concatenate((pr_all,pr_s), axis=1)
+            pr_all=np.concatenate((pr_all,pr_s.copy()), axis=1)
         return pr_all
 
     def _expectation_maximization(self, y_train, pred_prob_list, stop_delta=0.1):#_indexes
@@ -361,7 +371,7 @@ class Quantification:
         test_num=0#0..3 len(_y_test_list)
         for pred_prob in pred_prob_list:# Test sets loop
             #print('Test set N', _test_num)
-            pr_c=[x for x in pr_train]
+            pr_c=pr_train.copy()
 
             prob=pred_prob.T
             for cl_n in range(len(pr_train)):#Category
@@ -381,7 +391,7 @@ class Quantification:
                     pr_c_new=np.average(pr_c_x)#np.average(_prob[cl_n])
                     _delta=np.abs(pr_c_new-pr_c[cl_n])
                     #pr_train[cl_n]=pr_c[cl_n]
-                    #_prob[cl_n]=pr_c_x_k
+                    #prob[cl_n]=pr_c_x_k
                     pr_c[cl_n]=pr_c_new
                     iter+= 1
                 num_iter.append(iter)
@@ -390,74 +400,69 @@ class Quantification:
         return pr_all #,num_iter
 
     def __conditional_probability(self,p1,p2,val1,val2):
-        _c=0
+        c=0
         for _i in range(len(p1)):
             if p1[_i]==val1 and p2[_i]==val2:
-                _c=_c+1
-        return _c/len(p1)
+                c=c+1
+        return c/len(p1)
 
-    def __kfold_tp_fp(self, _csr, _y, n_folds=2):
-    #return true positive rate and false positive rate arrays
-        #[_csr, _y, y_names]=self._read_pickle(self._train_file)
-        _kf=KFold(_y.shape[0],n_folds=n_folds)
+    def __kfold_tp_fp(self, X, y, n_folds=2):
+        #return true positive rate and false positive rate arrays
+        _kf=KFold(y.shape[0],n_folds=n_folds)
         tp=[]
         fp=[]
         for train_index, test_index in _kf:
-            X_train, X_test = csr_matrix(_csr.toarray()[train_index]), csr_matrix(_csr.toarray()[test_index])
-            y_train, y_test = csr_matrix(_y.toarray()[train_index]), csr_matrix(_y.toarray()[test_index])
+            X_train, X_test = X[train_index], X[test_index]
+            y_train, y_test = y[train_index], y[test_index]
             model=self.model.fit(X_train, y_train)#arff.fit(X_train, y_train)
             y_predict=model.predict(X_test)
             tp_k=[]
             fp_k=[]
-            for _i in range(y_train.toarray().shape[1]):
-                s_true=y_test.toarray().T[_i]
-                s_pred=y_predict.toarray().T[_i]
-                #cm=metrics.confusion_matrix(s_true, s_pred)
+            for s_true,s_pred in zip(y_test.T,y_predict.T):
                 tp_k.append(self.__conditional_probability(s_pred, s_true, 1., 1.))#cm[0,0]/len(s_true))
-                #try:
                 fp_k.append(self.__conditional_probability(s_pred, s_true, 1., 0.))#cm[1,0]/len(s_true))#len(s_true))
-                #except:
-                #    #print(_i, metrics.confusion_matrix(s_true, s_pred), s_true, s_pred)
-                #    fp_k.append(0)
             tp.append(tp_k)
             fp.append(fp_k)
         tp_av=np.asarray([np.average(tp_k) for tp_k in np.asarray(tp).T])
         fp_av=np.asarray([np.average(fp_k) for fp_k in np.asarray(fp).T])
-        print('tp_av',tp_av)
-        print('fp_av',fp_av)
         with open(self.prefix+self.dir_name+'/'+str(n_folds)+'FCV.pickle', 'wb') as f:
             pickle.dump([tp_av, fp_av], f)
             f.close()
         return [tp_av, fp_av]
 
-    def _adj_classify_and_count(self, _X_train, _y_train,  _y_pred_list):#_indexes):
+    def _adj_classify_and_count(self, X_train, y_train,  y_pred_list):#_indexes):
         #[_y_train, _y_test_list, _y_pred_list, _test_files, y_names]=_indexes
-        n_folds=10
+        n_folds=5
+        if isinstance(X_train, csr_matrix) and isinstance(y_train, np.ndarray):
+            X_train=X_train.toarray()
+            y_train=y_train.toarray()
+        elif isinstance(X_train, np.ndarray) and isinstance(y_train, np.ndarray):
+            if len(y_train.shape)==1:
+                y_train=MultiLabelBinarizer().fit_transform([[y_p] for y_p in y_train])
+            elif len(y_train.shape)==2:
+                pass
         try:
+            #print(self.prefix+self.dir_name+'/'+str(n_folds)+'FCV.pickle')
             with open(self.prefix+self.dir_name+'/'+str(n_folds)+'FCV.pickle', 'rb') as f:
                 [tp_av, fp_av] = pickle.load(f)
-            print(self.prefix+self.dir_name+'/'+str(n_folds)+'FCV.pickle')
         except:
-            [tp_av, fp_av]=self.__kfold_tp_fp(_X_train, _y_train, n_folds=n_folds)
-        print(tp_av, fp_av)
-        #[tp_av, fp_av]=self._kfold_tp_fp(10)
+            [tp_av, fp_av]=self.__kfold_tp_fp(X_train, y_train, n_folds=n_folds)
+        #print('tp_av, fp_av',tp_av, fp_av)
         pred_all=[]
-        test_all=[]
-        j=0
-        for _y_pred in _y_pred_list:
+        for _y_pred in y_pred_list:
             pr=self._bin_prevalence(_y_pred)
-            print('pr', pr)
-            print('tp_av', tp_av)
-            print('fp_av', fp_av)
+            #print('pr', pr)
+            #print('tp_av', tp_av)
+            #print('fp_av', fp_av)
             pred=(pr-fp_av)/(tp_av-fp_av)
-            print('pred',pred)
+            pred=normalize(pred, norm='l1', axis=1)[0]
+            #print('pred n',pred)
             pred_all=np.concatenate((pred_all, pred), axis=1)
-            #test_all=np.concatenate((test_all, self._bin_prevalence(_y_test_list[j])), axis=1)
-            j+=1
-
-        print('pred_all',pred_all)
-        #print('test_all',test_all)
+        #print('pred_all',pred_all)
         return pred_all
+
+    def _prob_adj_classify_and_count(self, X_train, y_train, pred_prob_list):
+        return 0
 
     def _process_pipeline(self):
         #Warning! Processing can take a long time. We recommend to perform it step by step
