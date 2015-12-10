@@ -14,21 +14,24 @@ from sklearn.svm import LinearSVC, SVC
 from sklearn.multiclass import OneVsRestClassifier as mc
 from scipy import stats
 from scipy.sparse import csr_matrix
+import os
 
 class Quantification:
-    def __init__(self, method='', dir_name='temp'):
+    def __init__(self, method='', dir_name='temp', is_clean=True):
         self.prefix='texts/'
         self.arff=Parse_ARFF()
         self.dir_name=dir_name
+        if is_clean: self.__clean_dir(self.prefix+self.dir_name)
+        self.n_folds=5
         self.method_prev=self._bin_prevalence#._bin_prevalence or ._multi_prevalence
-        self.method=method
         self.model=mc(SVC(kernel='linear', probability=True))
-        if self.method=='PCC' or self.method=='EM' or self.method=='EM1' or self.method=='CC' or self.method=='ACC':
-            pass
-        elif self.method=='test':
+        if method=='PCC' or method=='EM' or method=='EM1' or method=='CC' or method=='ACC' or method=='PACC':
+            self.method=method
+        elif method=='test':
+            self.method=method
             self._train_file, self._test_files=self.arff.read_dir(self.prefix+'pickle_'+dir_name)
-        elif self.method=='':
-            self.method=='CC'
+        elif method=='':
+            self.method='CC'
 
     def fit(self, X, y):
         self.model.fit(X, y)
@@ -44,14 +47,20 @@ class Quantification:
             prevalence=self._classify_and_count([y_pred])
         elif self.method=='ACC':
             y_pred=self.model.predict(X)
-            prevalence=self._adj_classify_and_count(self.X_train, self.y_train, [y_pred])
+            self.kfold_results=self.__kfold_tp_fp(self.X_train, self.y_train, n_folds=self.n_folds)
+            prevalence=self._adj_classify_and_count([y_pred], is_prob=False)
         elif self.method=='PCC':
             prob_pred=self.model.predict_proba(X)
             prevalence=self._prob_classify_and_count([prob_pred])
+        elif self.method=='PACC':
+            self.kfold_results=self.__kfold_prob_tp_fp(self.X_train, self.y_train, n_folds=self.n_folds)
+            prob_pred=self.model.predict_proba(X)
+            prevalence=self._adj_classify_and_count([prob_pred], is_prob=True)
         elif self.method=='EM':
             prob_pred=self.model.predict_proba(X)
             prevalence=self._expectation_maximization(self.y_train, [prob_pred], stop_delta=0.00001)
         elif self.method=='EM1':
+            self.kfold_results=self.__kfold_prob_tp_fp(self.X_train, self.y_train, n_folds=self.n_folds)
             prob_pred=self.model.predict_proba(X)
             prevalence=self._exp_max(self.y_train, [prob_pred], stop_delta=0.00001)
         elif self.method=='test':
@@ -142,17 +151,24 @@ class Quantification:
             prevalence=np.asarray(prevalence, dtype=np.float)
         return prevalence
 
-    def _bin_prevalence_prob(self, _y):
-        _y = np.asarray(_y, dtype=np.float).T
-        _eps=1/(2*_y.shape[1])
-        _prevalence=[]
-        for _col in _y:
+    def _bin_prevalence_prob(self, y):
+        y = np.asarray(y, dtype=np.float).T
+        eps=1/(2*y.shape[1])
+        prevalence=[]
+        print(self.model.intercept_[0][0], self.model.coef_)
+        for col in y:
             nnz=0
-            for _elem in _col:
-                if _elem>=0.5:
+            for elem in col:
+                if elem>=self.model.intercept_:
                     nnz+=1
-            _prevalence.append((nnz+_eps)/(_eps*_y.shape[0]+_y.shape[1]))
-        return _prevalence
+            prevalence.append((nnz+eps)/(eps*y.shape[0]+y.shape[1]))
+        return prevalence
+
+    def __clean_dir(self, dir):
+        for name in os.listdir(dir):
+            file = os.path.join(dir, name)
+            if not os.path.islink(file) and not os.path.isdir(file):
+                os.remove(file)
 
     def __split_by_prevalence(self):
         [csr, y, y_names]=self._read_pickle(self._train_file)
@@ -341,7 +357,6 @@ class Quantification:
         for pred_prob in pred_prob_list:
             #print('pred_prob')
             pr_s=pr_train.copy()
-            print('pr_s',pr_s)
             prob_t=pred_prob.T
             prob_t_s =prob_t.copy()
             delta=1
@@ -351,10 +366,11 @@ class Quantification:
                     prob_t_s[cl_n]=prob_t[cl_n].copy()*(pr_s[cl_n]/pr_train[cl_n])  #E step
                 prob_t_s=normalize(prob_t_s, norm='l1',axis=0)                      #E step
                 pr_s1=np.average(prob_t_s, axis=1)                                  #M step
-                #delta=np.max(np.abs(pr_s1-pr_s))
+                #pr_s1=self._adj_classify_and_count([prob_t_s.transpose()],is_prob=True)
                 delta_s=delta
+                #delta=np.max(np.abs(pr_s1-pr_s))
                 delta=self._rae(pr_s,pr_s1)
-                print('pr_s1',pr_s1, delta)
+                #print('pr_s1',pr_s1, delta)
                 #print(prob_t_s)
                 #pr_train=pr_s.copy()
                 #prob_t=prob_t_s.copy()
@@ -384,7 +400,6 @@ class Quantification:
                     for pr_c_xk in prob[cl_n]:#xk in category c
                 #Step E
                         pr_c_x_k=(pr_c[cl_n]/pr_train[cl_n]*pr_c_xk)/(((1-pr_c[cl_n])/(1-pr_train[cl_n]))*(1-pr_c_xk)+pr_c[cl_n]/pr_train[cl_n]*pr_c_xk)
-                        #if _j==0: print(pr_c[_class_num],pr_train[_class_num], pr_c_xk, pr_c_x_k)
                         pr_c_x.append(pr_c_x_k)
                         _j+=1
                 #Step M
@@ -408,64 +423,100 @@ class Quantification:
 
     def __kfold_tp_fp(self, X, y, n_folds=2):
         #return true positive rate and false positive rate arrays
-        _kf=KFold(y.shape[0],n_folds=n_folds)
-        tp=[]
-        fp=[]
-        for train_index, test_index in _kf:
-            X_train, X_test = X[train_index], X[test_index]
-            y_train, y_test = y[train_index], y[test_index]
-            model=self.model.fit(X_train, y_train)#arff.fit(X_train, y_train)
-            y_predict=model.predict(X_test)
-            tp_k=[]
-            fp_k=[]
-            for s_true,s_pred in zip(y_test.T,y_predict.T):
-                tp_k.append(self.__conditional_probability(s_pred, s_true, 1., 1.))#cm[0,0]/len(s_true))
-                fp_k.append(self.__conditional_probability(s_pred, s_true, 1., 0.))#cm[1,0]/len(s_true))#len(s_true))
-            tp.append(tp_k)
-            fp.append(fp_k)
-        tp_av=np.asarray([np.average(tp_k) for tp_k in np.asarray(tp).T])
-        fp_av=np.asarray([np.average(fp_k) for fp_k in np.asarray(fp).T])
-        with open(self.prefix+self.dir_name+'/'+str(n_folds)+'FCV.pickle', 'wb') as f:
-            pickle.dump([tp_av, fp_av], f)
-            f.close()
-        return [tp_av, fp_av]
-
-    def _adj_classify_and_count(self, X_train, y_train,  y_pred_list):#_indexes):
-        #[_y_train, _y_test_list, _y_pred_list, _test_files, y_names]=_indexes
-        n_folds=5
-        if isinstance(X_train, csr_matrix) and isinstance(y_train, np.ndarray):
-            X_train=X_train.toarray()
-            y_train=y_train.toarray()
-        elif isinstance(X_train, np.ndarray) and isinstance(y_train, np.ndarray):
-            if len(y_train.shape)==1:
-                y_train=MultiLabelBinarizer().fit_transform([[y_p] for y_p in y_train])
-            elif len(y_train.shape)==2:
+        if isinstance(X, csr_matrix) and isinstance(y, np.ndarray):
+            X=X.toarray()
+            y=y.toarray()
+        elif isinstance(X, np.ndarray) and isinstance(y, np.ndarray):
+            if len(y.shape)==1:
+                y=MultiLabelBinarizer().fit_transform([[y_p] for y_p in y])
+            elif len(y.shape)==2:
                 pass
         try:
-            #print(self.prefix+self.dir_name+'/'+str(n_folds)+'FCV.pickle')
             with open(self.prefix+self.dir_name+'/'+str(n_folds)+'FCV.pickle', 'rb') as f:
                 [tp_av, fp_av] = pickle.load(f)
         except:
-            [tp_av, fp_av]=self.__kfold_tp_fp(X_train, y_train, n_folds=n_folds)
-        #print('tp_av, fp_av',tp_av, fp_av)
-        pred_all=[]
-        for _y_pred in y_pred_list:
-            pr=self._bin_prevalence(_y_pred)
-            #print('pr', pr)
-            #print('tp_av', tp_av)
-            #print('fp_av', fp_av)
+            _kf=KFold(y.shape[0],n_folds=n_folds)
+            tp=[]
+            fp=[]
+            for train_index, test_index in _kf:
+                X_train, X_test = X[train_index], X[test_index]
+                y_train, y_test = y[train_index], y[test_index]
+                model=self.model
+                model=model.fit(X_train, y_train)#arff.fit(X_train, y_train)
+                y_predict=model.predict(X_test)
+                tp_k=[]
+                fp_k=[]
+                for s_true,s_pred in zip(y_test.T,y_predict.T):
+                    tp_k.append(self.__conditional_probability(s_pred, s_true, 1., 1.))#cm[0,0]/len(s_true))
+                    fp_k.append(self.__conditional_probability(s_pred, s_true, 1., 0.))#cm[1,0]/len(s_true))#len(s_true))
+                tp.append(tp_k)
+                fp.append(fp_k)
+            tp_av=np.asarray([np.average(tp_k) for tp_k in np.asarray(tp).T])
+            fp_av=np.asarray([np.average(fp_k) for fp_k in np.asarray(fp).T])
+            with open(self.prefix+self.dir_name+'/'+str(n_folds)+'FCV.pickle', 'wb') as f:
+                pickle.dump([tp_av, fp_av], f)
+                f.close()
+            #print('[tp_av, fp_av] by index',tp_av, fp_av)
+        return [tp_av, fp_av]
+
+    def __kfold_prob_tp_fp(self, X, y, n_folds=2):
+        if isinstance(X, csr_matrix) and isinstance(y, np.ndarray):
+            X=X.toarray()
+            y=y.toarray()
+        elif isinstance(X, np.ndarray) and isinstance(y, np.ndarray):
+            if len(y.shape)==1:
+                y=MultiLabelBinarizer().fit_transform([[y_p] for y_p in y])
+            elif len(y.shape)==2:
+                pass
+        try:
+            with open(self.prefix+self.dir_name+'/'+str(n_folds)+'FCV.pickle', 'rb') as f:
+                [tp_av, fp_av] = pickle.load(f)
+        except:
+            kf=KFold(y.shape[0],n_folds=n_folds)
+            TP_avr=[]
+            FP_avr=[]
+            for train_index, test_index in kf:
+                X_train, X_test = X[train_index], X[test_index]
+                y_train, y_test = y[train_index], y[test_index]
+                model=self.model
+                model=model.fit(X_train, y_train)
+                y_predict=model.predict(X_test)
+                y_prob_predict=model.predict_proba(X_test)
+                TP=[]
+                FP=[]
+                for class_ind, class_prob in zip(y_predict.transpose(), y_prob_predict.transpose()):
+                    TP_class=[]
+                    FP_class=[]
+                    for ind, prob in zip(class_ind, class_prob):
+                        if ind==1: TP_class.append(prob)
+                        elif ind==0: FP_class.append(prob)
+                    TP.append(np.sum(TP_class)/len(class_ind))
+                    FP.append(np.sum(FP_class)/len(class_ind))
+                TP_avr.append(TP)
+                FP_avr.append(FP)
+            with open(self.prefix+self.dir_name+'/'+str(n_folds)+'FCV.pickle', 'wb') as f:
+                pickle.dump([np.average(TP_avr, axis=0), np.average(FP_avr, axis=0)], f)
+                f.close()
+            #print('tp, fp by prob', np.average(TP_avr, axis=0), np.average(FP_avr, axis=0))
+            tp_av, fp_av=np.average(TP_avr, axis=0), np.average(FP_avr, axis=0)
+        return [tp_av, fp_av]
+
+    def _adj_classify_and_count(self, y_pred_list, is_prob=False):
+        [tp_av, fp_av]=self.kfold_results
+        pred_conc=[]
+        for y_pred in y_pred_list:
+            if is_prob:
+                pr=np.average(y_pred,axis=0)
+            else:
+                pr=self.method_prev(y_pred)
             pred=(pr-fp_av)/(tp_av-fp_av)
             pred=normalize(pred, norm='l1', axis=1)[0]
-            #print('pred n',pred)
-            pred_all=np.concatenate((pred_all, pred), axis=1)
-        #print('pred_all',pred_all)
-        return pred_all
-
-    def _prob_adj_classify_and_count(self, X_train, y_train, pred_prob_list):
-        return 0
+            pred_conc=np.concatenate((pred_conc, pred), axis=1)
+        #print('PACC',pred_conc)
+        return pred_conc
 
     def _process_pipeline(self):
-        #Warning! Processing can take a long time. We recommend to perform it step by step
+        #Warning! Processing can takes a long period. We recommend to perform it step by step
         #pa=Parse_ARFF()
         #pa.convert_arff(QuantOHSUMED, is_predict=False)
         #q=Quantification('QuantOHSUMED')
