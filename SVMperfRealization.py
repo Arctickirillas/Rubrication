@@ -28,7 +28,6 @@ class SVMperf():
             file = open('name.txt', 'w')
 
         for i in range(len(y)):
-
             if y[i] == 1:
                 file.write('1 ')
                 for m in range(len(x[i])):
