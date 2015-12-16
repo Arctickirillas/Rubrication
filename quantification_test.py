@@ -108,21 +108,37 @@ def drift(X,y,proportion=0.5):
             new_X=X[new_ind[i]]
     return new_X, new_y
 
-
-k=0
-for i in range(1):
+k_CC=0
+k_PCC=0
+k_ACC=0
+k_PACC=0
+k_EM=0
+CC=[]
+PCC=[]
+ACC=[]
+PACC=[]
+EM=[]
+EM1=[]
+for i in range(100):
     X,y=generate_data()
     X_train, X_test, y_train, y_test=train_test_split(X,y, test_size=0.75)
-    X_test_d,y_test_d=drift(X_test,y_test,0.5)
-    q=Quantification(is_clean=False)
+    X_test_d,y_test_d=drift(X_test,y_test,0.2)
+    q=Quantification(is_clean=True)
     q.fit(X_train,y_train)
     print(i, q._classify_and_count([y_test_d]))
-    EM =q.score([X_test_d], [y_test_d], method='EM')
-    EM1=q.score([X_test_d], [y_test_d], method='EM1')
-    PCC=q.score([X_test_d], [y_test_d], method='PCC')
-    ACC=q.score([X_test_d], [y_test_d], method='ACC')
-    PACC=q.score([X_test_d], [y_test_d], method='PACC')
-    if EM1<PCC: k+=1
-    print('EM1',EM1,'EM',EM,'PCC',PCC,'ACC', ACC, 'PACC', PACC, 'k',k)
-print(k)
+    CC.append(q.score(X_test_d, y_test_d, method='CC'))
+    PCC.append(q.score(X_test_d, y_test_d, method='PCC'))
+    ACC.append(q.score(X_test_d, y_test_d, method='ACC'))
+    PACC.append(q.score(X_test_d, y_test_d, method='PACC'))
+    EM1.append(q.score(X_test_d, y_test_d, method='EM1'))
+    EM.append(q.score(X_test_d, y_test_d, method='EM'))
+    if EM1[i]<=PCC[i]: k_PCC+=1
+    if EM1[i]<=CC[i]: k_CC+=1
+    if EM1[i]<=ACC[i]: k_ACC+=1
+    if EM1[i]<=PACC[i]: k_PACC+=1
+    if EM1[i]<=EM[i]: k_EM+=1
+print('CC\t','PCC\t','ACC\t','PACC\t','EM1\t','EM\t')
+print(np.average(CC),'\t',np.average(PCC),'\t',np.average(ACC),'\t',np.average(PACC),'\t',np.average(EM1),'\t',np.average(EM),'\t\t\t',
+      np.var(CC),'\t',np.var(PCC),'\t',np.var(ACC),'\t',np.var(PACC),'\t',np.var(EM1),'\t',np.var(EM),'\t\t\t',
+      k_CC,'\t',k_PCC,'\t',k_ACC,'\t',k_PACC,'\t',k_EM)
 #quantify_OHSUMED()

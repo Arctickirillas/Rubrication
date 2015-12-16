@@ -6,7 +6,7 @@ import subprocess
 import numpy as np
 import scipy
 from quantify import CCforDouble
-
+from quantification import Quantification
 
 class SVMperf():
     def __init__(self,x_train,y_train,x_test,y_test):
@@ -17,11 +17,11 @@ class SVMperf():
         self.x_test = x_test
         self.y_test = y_test
         # For automatic
-        # self.getRepresentation(x_train,y_train,self.train)
-        # self.getRepresentation(x_test,y_test,self.test)
+        self.getRepresentation(x_train,y_train,self.train)
+        self.getRepresentation(x_test,y_test,self.test)
 
-        # self.model = self.fitSVMperf(self.train)
-        # self.predictions = self.predictSVMperf(self.test,self.model)
+        self.model = self.fitSVMperf(self.train)#'model.txt'#
+        self.predictions = self.predictSVMperf(self.test,self.model)
 
 
     def getRepresentation(self, x, y, name = None):
@@ -29,7 +29,7 @@ class SVMperf():
             file = open(str(name), 'w')
         else:
             file = open('name.txt', 'w')
-            print len(y)
+            print(len(y))
         # type ndarray
         if type(x) == type(np.ndarray(None)):
             for i in range(len(y)):
@@ -99,21 +99,22 @@ def generate_data():
 
 
 # EXAMPLE
-# X_train, X_test, y_train, y_test = generate_data()
+X_train, X_test, y_train, y_test = generate_data()
 #
 #
-# s = SVMperf(X_train, y_train, X_test, y_test)
-# print s.getPredictions()
+s = SVMperf(X_train, y_train, X_test, y_test)
+#exit()
+print(s.getPredictions())
 #
-# q = CCforDouble(s.getPredictions())
-# p = CCforDouble(s.y_test)
+q = CCforDouble(s.getPredictions())
+p = CCforDouble(s.y_test)
 #
-# print 'REAL:',p
-# print 'EST:',q
+print('REAL:',p)
+print('EST:',q)
 #
 #
-# print 'KLD:',s.getKLD(p,q)
+print('KLD:',s.getKLD(p,q))
 #
-# print s.getDescriptionSVM()
+print(s.getDescriptionSVM())
 
 

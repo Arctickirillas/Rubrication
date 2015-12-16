@@ -35,8 +35,9 @@ class Quantification:
 
     def fit(self, X, y):
         self.model.fit(X, y)
-        self.y_train=y#csr_matrix(MultiLabelBinarizer().fit_transform([[y_p] for y_p in y]))
+        self.y_train=y
         self.X_train=X
+        self.classes=np.unique(y)
         return self.model
 
     def predict(self, X, method=''):
@@ -44,6 +45,7 @@ class Quantification:
             self.method=method
         if self.method=='CC':
             y_pred=self.model.predict(X)
+            #print('CC', y_pred)
             prevalence=self._classify_and_count([y_pred])
         elif self.method=='ACC':
             y_pred=self.model.predict(X)
@@ -67,13 +69,10 @@ class Quantification:
             self._process_pipeline()
         return prevalence
 
-    def score(self, list_of_X, list_of_y, method=''):
-        list_of_y_true=[]
-        prev_pred=[]
-        for X ,y in zip(list_of_X, list_of_y):
-            prev_pred=np.concatenate((prev_pred,self.predict(X,method)))
-            list_of_y_true.append(y)#csr_matrix(MultiLabelBinarizer().fit_transform([[y_] for y_ in y])))
-        prev_true=self._classify_and_count(list_of_y_true)
+    def score(self, X, y, method=''):
+        prev_pred=self.predict(X,method)
+        #print(self.method, prev_pred)
+        prev_true=self._classify_and_count([y])
         scores=self._divergence_bin(prev_true, prev_pred)
         #print('prev_true=',prev_true,' prev_pred=',prev_pred)
         return np.average(scores)
@@ -92,13 +91,19 @@ class Quantification:
         q = np.asarray(q, dtype=np.float)
         return np.sum(np.where(p != 0,np.abs(q-p)/p, 0))
 
+    def _ae(self, p, q):
+        p = np.asarray(p, dtype=np.float)
+        q = np.asarray(q, dtype=np.float)
+        return np.average(np.abs(q-p))
+
     def _divergence_bin(self,p,q,func=''):
         if func=='':func=self._kld
         p = np.asarray(p, dtype=np.float)
         q = np.asarray(q, dtype=np.float)
+        #print(p,q)
         klds=[]
-        for _i in range(len(p)):
-            klds.append(func([p[_i],1-p[_i]], [q[_i],1-q[_i]]))
+        for p_i,q_i in zip(p,q):
+            klds.append(func([p_i,1-p_i], [q_i,1-q_i]))
         #print(len(_klds))
         #_avg=np.average(_klds)
         return klds#_avg
@@ -116,7 +121,7 @@ class Quantification:
             prevalence_smooth=prevalence_smooth/(np.sum(prevalence)+eps*y.shape[1])
         elif isinstance(y, np.ndarray):
             if len(y.shape)==1:
-                yt=MultiLabelBinarizer().fit_transform([[y_p] for y_p in y]).transpose()
+                yt=MultiLabelBinarizer(classes=self.classes).fit_transform([[y_p] for y_p in y]).transpose()
                 for col in yt:
                     prevalence.append(np.sum(col))
                 prevalence=prevalence/(np.sum(prevalence))
@@ -143,7 +148,7 @@ class Quantification:
         elif isinstance(y, np.ndarray):
             if len(y.shape)==1:
                 #print('Variable "y" should have more then 1 dimension. Use MultiLabelBinarizer()')
-                yt=MultiLabelBinarizer().fit_transform([[y_p] for y_p in y]).transpose()
+                yt=MultiLabelBinarizer(classes=self.classes).fit_transform([[y_p] for y_p in y]).transpose()
             elif len(y.shape)==2:
                 yt=y.transpose()
             for col in range(yt.shape[0]):
@@ -369,12 +374,13 @@ class Quantification:
                 #pr_s1=self._adj_classify_and_count([prob_t_s.transpose()],is_prob=True)
                 delta_s=delta
                 #delta=np.max(np.abs(pr_s1-pr_s))
-                delta=self._rae(pr_s,pr_s1)
+                delta=self._ae(pr_s,pr_s1)
                 #print('pr_s1',pr_s1, delta)
                 #print(prob_t_s)
                 #pr_train=pr_s.copy()
                 #prob_t=prob_t_s.copy()
                 pr_s=pr_s1.copy()
+            if np.max(pr_s)>0.99: pr_s=np.average(prob_t, axis=1)
             pr_all=np.concatenate((pr_all,pr_s.copy()), axis=1)
         return pr_all
 
@@ -405,11 +411,13 @@ class Quantification:
                 #Step M
                     pr_c_new=np.average(pr_c_x)#np.average(_prob[cl_n])
                     _delta=np.abs(pr_c_new-pr_c[cl_n])
+                    #print('_delta',_delta)
                     #pr_train[cl_n]=pr_c[cl_n]
                     #prob[cl_n]=pr_c_x_k
                     pr_c[cl_n]=pr_c_new
                     iter+= 1
                 num_iter.append(iter)
+                #if np.max([pr_c[cl_n],1-pr_c[cl_n]])>0.99: pr_c=np.average(prob[cl_n], axis=1)
             pr_all=np.concatenate((pr_all,pr_c), axis=1)
             test_num+=1
         return pr_all #,num_iter
@@ -428,7 +436,7 @@ class Quantification:
             y=y.toarray()
         elif isinstance(X, np.ndarray) and isinstance(y, np.ndarray):
             if len(y.shape)==1:
-                y=MultiLabelBinarizer().fit_transform([[y_p] for y_p in y])
+                y=MultiLabelBinarizer(classes=self.classes).fit_transform([[y_p] for y_p in y])
             elif len(y.shape)==2:
                 pass
         try:
@@ -465,7 +473,7 @@ class Quantification:
             y=y.toarray()
         elif isinstance(X, np.ndarray) and isinstance(y, np.ndarray):
             if len(y.shape)==1:
-                y=MultiLabelBinarizer().fit_transform([[y_p] for y_p in y])
+                y=MultiLabelBinarizer(classes=self.classes).fit_transform([[y_p] for y_p in y])
             elif len(y.shape)==2:
                 pass
         try:
@@ -509,10 +517,18 @@ class Quantification:
                 pr=np.average(y_pred,axis=0)
             else:
                 pr=self.method_prev(y_pred)
-            pred=(pr-fp_av)/(tp_av-fp_av)
-            pred=normalize(pred, norm='l1', axis=1)[0]
+            try:
+                pred=(pr-fp_av)/(tp_av-fp_av)
+                if np.min(pred)>=0:
+                    pred=normalize(pred, norm='l1', axis=1)[0]
+                else:
+                    print(pred)
+                    print(pr,tp_av,fp_av)
+                    pred=pr
+            except:
+                print(pr,tp_av,fp_av)
+                pred=pr
             pred_conc=np.concatenate((pred_conc, pred), axis=1)
-        #print('PACC',pred_conc)
         return pred_conc
 
     def _process_pipeline(self):
