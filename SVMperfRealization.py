@@ -7,6 +7,7 @@ import numpy as np
 import scipy
 from quantify import CCforDouble
 from quantification import Quantification
+from time import sleep
 
 class SVMperf():
     def __init__(self,x_train,y_train,x_test,y_test):
@@ -19,7 +20,7 @@ class SVMperf():
         # For automatic
         self.getRepresentation(x_train,y_train,self.train)
         self.getRepresentation(x_test,y_test,self.test)
-
+        sleep(1)
         self.model = self.fitSVMperf(self.train)#'model.txt'#
         self.predictions = self.predictSVMperf(self.test,self.model)
 
@@ -67,10 +68,12 @@ class SVMperf():
 
     def fitSVMperf(self, trainData, model = 'model.txt'):
         subprocess.Popen(["svm-perf-original/svm_perf_learn","-c","20",trainData,model], stdout=subprocess.PIPE)
+        sleep(1)
         return model
 
     def predictSVMperf(self, testData, model, predictions = 'predictions.txt'):
         self.description = subprocess.Popen(["svm-perf-original/svm_perf_classify",testData,model,predictions], stdout=subprocess.PIPE)
+        sleep(1)
         return predictions
 
     def getDescriptionSVM(self):
@@ -83,7 +86,7 @@ class SVMperf():
             if float(line) >= 0 :
                 q.append(1)
             elif float(line) < 0:
-                q.append(-1)
+                q.append(0)
         f.close()
         return  np.array(q)
 
@@ -99,22 +102,22 @@ def generate_data():
 
 
 # EXAMPLE
-X_train, X_test, y_train, y_test = generate_data()
+#X_train, X_test, y_train, y_test = generate_data()
 #
 #
-s = SVMperf(X_train, y_train, X_test, y_test)
+#s = SVMperf(X_train, y_train, X_test, y_test)
 #exit()
-print(s.getPredictions())
+#print(s.getPredictions())
 #
-q = CCforDouble(s.getPredictions())
-p = CCforDouble(s.y_test)
+#q = CCforDouble(s.getPredictions())
+#p = CCforDouble(s.y_test)
 #
-print('REAL:',p)
-print('EST:',q)
+#print('REAL:',p)
+#print('EST:',q)
 #
 #
-print('KLD:',s.getKLD(p,q))
+#print('KLD:',s.getKLD(p,q))
 #
-print(s.getDescriptionSVM())
+#print(s.getDescriptionSVM())
 
 

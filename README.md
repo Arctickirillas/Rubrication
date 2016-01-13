@@ -28,7 +28,7 @@ print(q.score([[-0.8, -1],[0.9, 1.1]], [1, 2]))
 #Methods:
 ## __init__(method='CC')
 
-Parameter method: string, optional (default='CC'). It must be one of 'CC', 'ACC', 'PCC', 'PACC', 'EM', 'EM1', '', 'test'.
+Parameter method: string, optional (default='CC'). It must be one of 'CC', 'ACC', 'PCC', 'PACC', 'EM', 'EM1', 'Iter', 'Iter1', '', 'test'.
 
 ## fit(X, y)
 

@@ -14,18 +14,32 @@ from sklearn.svm import LinearSVC, SVC
 from sklearn.multiclass import OneVsRestClassifier as mc
 from scipy import stats
 from scipy.sparse import csr_matrix
+from sklearn import linear_model
 import os
+import scipy
+import random
 
 class Quantification:
+    def __classificator(self, class_weight='auto'):
+        if class_weight=='':
+            #return mc(SVC(kernel='linear', probability=True))
+            return linear_model.LogisticRegression()
+        else:
+            #return mc(SVC(kernel='linear', probability=True, class_weight = class_weight))
+            return linear_model.LogisticRegression(class_weight=class_weight)
+
     def __init__(self, method='', dir_name='temp', is_clean=True):
         self.prefix='texts/'
         self.arff=Parse_ARFF()
         self.dir_name=dir_name
         if is_clean: self.__clean_dir(self.prefix+self.dir_name)
         self.n_folds=5
+        self.classes=[0,1]
         self.method_prev=self._bin_prevalence#._bin_prevalence or ._multi_prevalence
-        self.model=mc(SVC(kernel='linear', probability=True))
-        if method=='PCC' or method=='EM' or method=='EM1' or method=='CC' or method=='ACC' or method=='PACC':
+        self.model=self.__classificator()#class_weight={0:1,1:1})
+        if method=='EM' or method=='EM1' or method=='Iter' or method=='Iter1':
+            self.method=method
+        elif method=='PCC' or method=='CC' or method=='ACC' or method=='PACC':
             self.method=method
         elif method=='test':
             self.method=method
@@ -34,10 +48,18 @@ class Quantification:
             self.method='CC'
 
     def fit(self, X, y):
-        self.model.fit(X, y)
+        if isinstance(y, list): y=np.asarray(y)
+        self.classes=np.unique(y)
+        #if isinstance(y, csr_matrix):
+        #    self.y_train=y.toarray()
+        #elif isinstance(y, np.ndarray):
+        #    if len(y.shape)==1:
+        #        self.y_train=MultiLabelBinarizer(classes=self.classes).fit_transform([[y_p] for y_p in y])
+        #    elif len(y.shape)==2:
+        #        self.y_train=y
         self.y_train=y
         self.X_train=X
-        self.classes=np.unique(y)
+        self.model.fit(X, y)
         return self.model
 
     def predict(self, X, method=''):
@@ -46,7 +68,7 @@ class Quantification:
         if self.method=='CC':
             y_pred=self.model.predict(X)
             #print('CC', y_pred)
-            prevalence=self._classify_and_count([y_pred])
+            prevalence=self._classify_and_count(y_pred)
         elif self.method=='ACC':
             y_pred=self.model.predict(X)
             self.kfold_results=self.__kfold_tp_fp(self.X_train, self.y_train, n_folds=self.n_folds)
@@ -62,20 +84,140 @@ class Quantification:
             prob_pred=self.model.predict_proba(X)
             prevalence=self._expectation_maximization(self.y_train, [prob_pred], stop_delta=0.00001)
         elif self.method=='EM1':
-            self.kfold_results=self.__kfold_prob_tp_fp(self.X_train, self.y_train, n_folds=self.n_folds)
             prob_pred=self.model.predict_proba(X)
             prevalence=self._exp_max(self.y_train, [prob_pred], stop_delta=0.00001)
+        elif self.method=='Iter':
+            prevalence=self._cost_sens_learning(X, stop_delta=0.001, class_weight_start='auto')
+        elif self.method=='Iter1':
+            prevalence=self._cost_sens_learning(X, stop_delta=0.001, class_weight_start='')
         elif self.method=='test':
             self._process_pipeline()
         return prevalence
 
     def score(self, X, y, method=''):
+        y=np.asarray(y)
         prev_pred=self.predict(X,method)
         #print(self.method, prev_pred)
-        prev_true=self._classify_and_count([y])
-        scores=self._divergence_bin(prev_true, prev_pred)
-        #print('prev_true=',prev_true,' prev_pred=',prev_pred)
+        prev_true=self._classify_and_count(y)
+        #scores=self._divergence_bin(prev_true, prev_pred, self._kld)
+        scores=self._kld(prev_true, prev_pred)
         return np.average(scores)
+
+    def make_drift_rnd(X,y,proportion=0.5):
+        index={}
+        for val in scipy.unique(y):
+            index[val]=[]
+        for key in range(len(y)):
+            index[y[key]].append(key)
+        ind2low=[]
+        num2low=int(len(index)/2)
+        while ind2low==[] and num2low!=0:
+            j=0
+            for i in index:
+                #print(i, j, num2low)
+                if j>=num2low:
+                    break
+                rnd=random.random()
+                #print(rnd,j,i)
+                if rnd<0.5:
+                    ind2low.append(i)
+                    j+=1
+        new_ind=index.copy()
+        new_set=[]
+        for ind in ind2low:
+            for val in index[ind]:
+                rnd=random.random()
+                if rnd > proportion:
+                    new_set.append(val)
+            new_ind[ind]=new_set
+        new_y=[]
+        new_X=[]
+
+        for i in index:
+            try:
+                new_y=np.concatenate((new_y,y[new_ind[i]]))
+                new_X=np.concatenate((new_X,X[new_ind[i]]),axis=0)
+            except:
+                new_y=y[new_ind[i]]
+                new_X=X[new_ind[i]]
+        return new_X, new_y
+
+    def make_drift_05(X,y,proportion=0.5):
+        #index=[]
+        #for key in range(len(scipy.unique(y))):
+        #    index.append(key)
+        #y=MultiLabelBinarizer(classes=index).fit_transform([[y_p] for y_p in y])
+        ind2low=[]
+        if proportion<0.5:
+            ind2low.append(0)
+            proportion=proportion*2
+        else:
+            ind2low=[i for i in range(1,y.shape[1])]
+            proportion=(1-proportion)*2
+
+        new_X=np.array([], ndmin=2)
+        new_y=np.array([], ndmin=2)
+        for clas in ind2low:
+            for ind, num in zip(y.transpose()[clas],range(len(y.transpose()[clas]))):
+                if ind>0.5:
+                    rnd=random.random()
+                    if rnd < proportion:
+                        if new_X!=np.array([], ndmin=2):
+                            #print(ind, rnd, new_y.shape,new_X.shape[0])
+                            tX=np.ndarray(shape=(1,X[num].shape[0]), buffer=X[num].copy())
+                            new_X=np.concatenate((new_X,tX), axis=0)
+                            ty=np.ndarray(shape=(1,y[num].shape[0]), buffer=y[num].copy(), dtype=int)
+                            new_y=np.concatenate((new_y,ty), axis=0)
+                        else:
+                            new_X=np.ndarray(shape=(1,X[num].shape[0]), buffer=X[num].copy())
+                            new_y=np.ndarray(shape=(1,y[num].shape[0]), buffer=y[num].copy(), dtype=int)
+                else:
+                    if new_X!=np.array([], ndmin=2):
+                        tX=np.ndarray(shape=(1,X[num].shape[0]), buffer=X[num].copy())
+                        new_X=np.concatenate((new_X,tX), axis=0)
+                        ty=np.ndarray(shape=(1,y[num].shape[0]), buffer=y[num].copy(), dtype=int)
+                        new_y=np.concatenate((new_y,ty), axis=0)
+                    else:
+                        new_X=np.ndarray(shape=(1,X[num].shape[0]), buffer=X[num].copy())
+                        new_y=np.ndarray(shape=(1,y[num].shape[0]), buffer=y[num].copy(), dtype=int)
+        return new_X, new_y
+
+    def make_drift_list(X,y,proportion=0.5):
+        #index=[]
+        #for key in range(len(scipy.unique(y))):
+        #    index.append(key)
+        #y=MultiLabelBinarizer(classes=index).fit_transform([[y_p] for y_p in y])
+        ind_set=scipy.unique(y)
+        if proportion<0.5:
+            ind2low=set([0])
+            proportion=proportion*2
+        else:
+            ind2low=set([i for i in range(1,len(ind_set))])
+            proportion=(1-proportion)*2
+
+        new_X=np.array([], ndmin=2)
+        new_y=[]
+        for clas in ind_set:
+            for ind, num in zip(y,range(len(y))):
+                if ind in ind2low:
+                    rnd=random.random()
+                    if rnd < proportion:
+                        if new_X!=np.array([], ndmin=2):
+                            tX=np.ndarray(shape=(1,X[num].shape[0]), buffer=X[num].copy())
+                            new_X=np.concatenate((new_X,tX), axis=0)
+                            new_y.append(ind)
+                        else:
+                            new_X=np.ndarray(shape=(1,X[num].shape[0]), buffer=X[num].copy())
+                            new_y.append(ind)
+                else:
+                    if new_X!=np.array([], ndmin=2):
+                        tX=np.ndarray(shape=(1,X[num].shape[0]), buffer=X[num].copy())
+                        new_X=np.concatenate((new_X,tX), axis=0)
+                        new_y.append(ind)
+                    else:
+                        new_X=np.ndarray(shape=(1,X[num].shape[0]), buffer=X[num].copy())
+                        new_y.append(ind)
+        return new_X, new_y
 
     def _kld(self, p, q):
         """Kullback-Leibler divergence D(P || Q) for discrete distributions when Q is used to approximate P
@@ -139,15 +281,22 @@ class Quantification:
         return prevalence_smooth
 
     def _bin_prevalence(self, y):
-        eps=1/(2*y.shape[0])
         prevalence=[]
         if isinstance(y,csr_matrix):
+            eps=1/(2*y.shape[0])
             for col in range(y.shape[1]):
                 prevalence.append((y.getcol(col).nnz+eps)/(eps*y.shape[1]+y.shape[0]))
             prevalence=np.asarray(prevalence, dtype=np.float)
+        elif isinstance(y,list):
+            eps=1/(2*len(y))
+            yt=MultiLabelBinarizer(classes=self.classes).fit_transform([[y_p] for y_p in y]).transpose()
+            for col in range(yt.shape[0]):
+                prevalence.append((np.sum(yt[col])+eps)/(eps*yt.shape[0]+yt.shape[1]))
+            prevalence=np.asarray(prevalence, dtype=np.float)
         elif isinstance(y, np.ndarray):
+            eps=1/(2*y.shape[0])
             if len(y.shape)==1:
-                #print('Variable "y" should have more then 1 dimension. Use MultiLabelBinarizer()')
+                #print(self.classes, 'Variable "y" should have more then 1 dimension. Use MultiLabelBinarizer()')
                 yt=MultiLabelBinarizer(classes=self.classes).fit_transform([[y_p] for y_p in y]).transpose()
             elif len(y.shape)==2:
                 yt=y.transpose()
@@ -264,13 +413,14 @@ class Quantification:
         tt=stats.ttest_rel(_kld_1, _kld_2)
         return tt
 
-    def _classify_and_count(self, y_list, is_prob=False):
-        _prev_test=[]
-        for _y_test in y_list:# Test files loop
-            if is_prob:
-                _prev_test=np.concatenate((_prev_test,self.method_prev(_y_test)), axis=1)
-            else:
-                _prev_test=np.concatenate((_prev_test,self.method_prev(_y_test)), axis=1)
+    def _classify_and_count(self, _y_test):
+        #_prev_test=[]
+        #for _y_test in y_list:# Test files loop
+        #    if is_prob:
+        #        _prev_test=np.concatenate((_prev_test,self.method_prev(_y_test)), axis=1)
+        #    else:
+        #        _prev_test=np.concatenate((_prev_test,self.method_prev(_y_test)), axis=1)
+        _prev_test=self.method_prev(_y_test)
         return _prev_test
 
     def _count_diff1(self, _prev_test, _prev_test_estimate, _num_iter):
@@ -417,10 +567,46 @@ class Quantification:
                     pr_c[cl_n]=pr_c_new
                     iter+= 1
                 num_iter.append(iter)
-                #if np.max([pr_c[cl_n],1-pr_c[cl_n]])>0.99: pr_c=np.average(prob[cl_n], axis=1)
+                if np.max([pr_c[cl_n],1-pr_c[cl_n]])>0.99: pr_c[cl_n]=np.average(prob[cl_n])
             pr_all=np.concatenate((pr_all,pr_c), axis=1)
             test_num+=1
         return pr_all #,num_iter
+
+    def _cost_sens_learning(self, X_test, stop_delta=0.00001, class_weight_start='auto'):
+        pred_prev_train=self._classify_and_count(self.y_train)
+        pred_prev0=pred_prev_train.copy()
+        model=self.__classificator(class_weight=class_weight_start)#class_weight={0:1,1:1})##
+        model.fit(self.X_train, self.y_train)
+        pred_prev1=np.average(model.predict_proba(X_test), axis=0)#
+        #pred_prev1=self._classify_and_count(model.predict(X_test))
+        delta1=0
+        delta2=0
+        d_delta1=0
+        d_delta2=0
+        for i in range(10):
+            #print('pred_prev0',pred_prev0)
+            #print('pred_prev1',pred_prev1)
+            #print(pred_prev1/pred_prev_train)
+            #print(delta2)
+            class_weight=dict(zip(self.classes, pred_prev1/pred_prev_train))
+
+            model=self.__classificator(class_weight=class_weight)
+            model.fit(self.X_train, self.y_train)
+            pred_prev2=np.average(model.predict_proba(X_test), axis=0)#
+            #pred_prev2=self._classify_and_count(model.predict(X_test))#
+            delta1=delta2
+            delta2=self._ae(pred_prev1,pred_prev2)
+            d_delta1=d_delta2
+            d_delta2=abs(delta2-delta1)
+            if d_delta2>d_delta1 and d_delta1!=0:
+                print('dd',d_delta1, d_delta2)
+            #print(pred_prev2[0],'\t', delta1)
+            if delta2<stop_delta:
+                break
+            pred_prev0=pred_prev1.copy()
+            pred_prev1=pred_prev2.copy()
+        #print(pred_prev1)
+        return pred_prev1
 
     def __conditional_probability(self,p1,p2,val1,val2):
         c=0
@@ -431,14 +617,21 @@ class Quantification:
 
     def __kfold_tp_fp(self, X, y, n_folds=2):
         #return true positive rate and false positive rate arrays
-        if isinstance(X, csr_matrix) and isinstance(y, np.ndarray):
-            X=X.toarray()
-            y=y.toarray()
-        elif isinstance(X, np.ndarray) and isinstance(y, np.ndarray):
-            if len(y.shape)==1:
-                y=MultiLabelBinarizer(classes=self.classes).fit_transform([[y_p] for y_p in y])
-            elif len(y.shape)==2:
-                pass
+
+        #if isinstance(X, csr_matrix) and isinstance(y, csr_matrix):
+        #    X=X.toarray()
+        #    y=y.toarray()
+        #elif isinstance(X, csr_matrix) and isinstance(y, np.ndarray):
+        #    X=X.toarray()
+        #    y=MultiLabelBinarizer(classes=self.classes).fit_transform([[y_p] for y_p in y])
+        #elif isinstance(X, np.ndarray) and isinstance(y, np.ndarray):
+        #    if len(y.shape)==1:
+        #        y=MultiLabelBinarizer(classes=self.classes).fit_transform([[y_p] for y_p in y])
+        #    elif len(y.shape)==2:
+        #        pass
+        if isinstance(y, list):
+            y=np.asarray(y)
+
         try:
             with open(self.prefix+self.dir_name+'/'+str(n_folds)+'FCV.pickle', 'rb') as f:
                 [tp_av, fp_av] = pickle.load(f)
@@ -454,6 +647,11 @@ class Quantification:
                 y_predict=model.predict(X_test)
                 tp_k=[]
                 fp_k=[]
+                if len(y.shape)==1:
+                    y_test=MultiLabelBinarizer(classes=self.classes).fit_transform([[y_p] for y_p in y_test])
+                    y_predict=MultiLabelBinarizer(classes=self.classes).fit_transform([[y_p] for y_p in y_predict])
+                elif len(y.shape)==2:
+                    pass
                 for s_true,s_pred in zip(y_test.T,y_predict.T):
                     tp_k.append(self.__conditional_probability(s_pred, s_true, 1., 1.))#cm[0,0]/len(s_true))
                     fp_k.append(self.__conditional_probability(s_pred, s_true, 1., 0.))#cm[1,0]/len(s_true))#len(s_true))
@@ -468,16 +666,18 @@ class Quantification:
         return [tp_av, fp_av]
 
     def __kfold_prob_tp_fp(self, X, y, n_folds=2):
-        if isinstance(X, csr_matrix) and isinstance(y, np.ndarray):
-            X=X.toarray()
-            y=y.toarray()
-        elif isinstance(X, np.ndarray) and isinstance(y, np.ndarray):
-            if len(y.shape)==1:
-                y=MultiLabelBinarizer(classes=self.classes).fit_transform([[y_p] for y_p in y])
-            elif len(y.shape)==2:
-                pass
+        # if isinstance(X, csr_matrix) and isinstance(y, np.ndarray):
+        #     X=X.toarray()
+        # elif isinstance(X, np.ndarray) and isinstance(y, np.ndarray):
+        #     if len(y.shape)==1:
+        #         y=MultiLabelBinarizer(classes=self.classes).fit_transform([[y_p] for y_p in y])
+        #     elif len(y.shape)==2:
+        #         pass
+        if isinstance(y, list):
+            y=np.asarray(y)
+
         try:
-            with open(self.prefix+self.dir_name+'/'+str(n_folds)+'FCV.pickle', 'rb') as f:
+            with open(self.prefix+self.dir_name+'/'+str(n_folds)+'FCV_prob.pickle', 'rb') as f:
                 [tp_av, fp_av] = pickle.load(f)
         except:
             kf=KFold(y.shape[0],n_folds=n_folds)
@@ -492,6 +692,10 @@ class Quantification:
                 y_prob_predict=model.predict_proba(X_test)
                 TP=[]
                 FP=[]
+                if len(y.shape)==1:
+                    y_predict=MultiLabelBinarizer(classes=self.classes).fit_transform([[y_p] for y_p in y_predict])
+                elif len(y.shape)==2:
+                    pass
                 for class_ind, class_prob in zip(y_predict.transpose(), y_prob_predict.transpose()):
                     TP_class=[]
                     FP_class=[]
@@ -502,11 +706,11 @@ class Quantification:
                     FP.append(np.sum(FP_class)/len(class_ind))
                 TP_avr.append(TP)
                 FP_avr.append(FP)
-            with open(self.prefix+self.dir_name+'/'+str(n_folds)+'FCV.pickle', 'wb') as f:
-                pickle.dump([np.average(TP_avr, axis=0), np.average(FP_avr, axis=0)], f)
-                f.close()
-            #print('tp, fp by prob', np.average(TP_avr, axis=0), np.average(FP_avr, axis=0))
             tp_av, fp_av=np.average(TP_avr, axis=0), np.average(FP_avr, axis=0)
+            with open(self.prefix+self.dir_name+'/'+str(n_folds)+'FCV_prob.pickle', 'wb') as f:
+                pickle.dump([tp_av, fp_av], f)
+                f.close()
+            #print('tp, fp by prob', tp_av, fp_av)
         return [tp_av, fp_av]
 
     def _adj_classify_and_count(self, y_pred_list, is_prob=False):
