@@ -15,6 +15,7 @@ from sklearn.multiclass import OneVsRestClassifier as mc
 from scipy import stats
 from scipy.sparse import csr_matrix
 from sklearn import linear_model
+from sklearn.mixture import GMM, VBGMM
 import os
 import scipy
 import random
@@ -22,11 +23,13 @@ import random
 class Quantification:
     def __classificator(self, class_weight='auto'):
         if class_weight=='':
-            #return mc(SVC(kernel='linear', probability=True))
+            #return SVC(kernel='linear', probability=True)
             return linear_model.LogisticRegression()
+            #return GMM(n_components=2)
         else:
-            #return mc(SVC(kernel='linear', probability=True, class_weight = class_weight))
+            #return SVC(kernel='linear', probability=True, class_weight = class_weight)
             return linear_model.LogisticRegression(class_weight=class_weight)
+            #return GMM(n_components=2)
 
     def __init__(self, method='', dir_name='temp', is_clean=True):
         self.prefix='texts/'
@@ -36,7 +39,7 @@ class Quantification:
         self.n_folds=5
         self.classes=[0,1]
         self.method_prev=self._bin_prevalence#._bin_prevalence or ._multi_prevalence
-        self.model=self.__classificator()#class_weight={0:1,1:1})
+        self.model=self.__classificator(class_weight='auto')
         if method=='EM' or method=='EM1' or method=='Iter' or method=='Iter1':
             self.method=method
         elif method=='PCC' or method=='CC' or method=='ACC' or method=='PACC':
@@ -72,35 +75,44 @@ class Quantification:
         elif self.method=='ACC':
             y_pred=self.model.predict(X)
             self.kfold_results=self.__kfold_tp_fp(self.X_train, self.y_train, n_folds=self.n_folds)
-            prevalence=self._adj_classify_and_count([y_pred], is_prob=False)
+            prevalence=self._adj_classify_and_count(y_pred, is_prob=False)
         elif self.method=='PCC':
             prob_pred=self.model.predict_proba(X)
-            prevalence=self._prob_classify_and_count([prob_pred])
+            prevalence=self._prob_classify_and_count(prob_pred)
         elif self.method=='PACC':
             self.kfold_results=self.__kfold_prob_tp_fp(self.X_train, self.y_train, n_folds=self.n_folds)
             prob_pred=self.model.predict_proba(X)
-            prevalence=self._adj_classify_and_count([prob_pred], is_prob=True)
+            prevalence=self._adj_classify_and_count(prob_pred, is_prob=True)
         elif self.method=='EM':
             prob_pred=self.model.predict_proba(X)
-            prevalence=self._expectation_maximization(self.y_train, [prob_pred], stop_delta=0.00001)
+            prevalence=self._expectation_maximization(self.y_train, prob_pred, stop_delta=0.00001)
         elif self.method=='EM1':
             prob_pred=self.model.predict_proba(X)
-            prevalence=self._exp_max(self.y_train, [prob_pred], stop_delta=0.00001)
+            prevalence=self._exp_max(self.y_train, prob_pred, stop_delta=0.00001)
         elif self.method=='Iter':
-            prevalence=self._cost_sens_learning(X, stop_delta=0.001, class_weight_start='auto')
+            prevalence=self._cost_sens_learning(X, stop_delta=0.00001, class_weight_start='auto')
         elif self.method=='Iter1':
-            prevalence=self._cost_sens_learning(X, stop_delta=0.001, class_weight_start='')
+            prevalence=self._cost_sens_learning(X, stop_delta=0.00001, class_weight_start='')
         elif self.method=='test':
             self._process_pipeline()
         return prevalence
 
-    def score(self, X, y, method=''):
-        y=np.asarray(y)
-        prev_pred=self.predict(X,method)
-        #print(self.method, prev_pred)
-        prev_true=self._classify_and_count(y)
-        #scores=self._divergence_bin(prev_true, prev_pred, self._kld)
-        scores=self._kld(prev_true, prev_pred)
+    def predict_set(self, X_list, method=''):
+        scores=[]
+        for X in X_list:
+            prev_pred=self.predict(X,method)
+            scores.append(prev_pred)
+        return scores
+
+    def score(self, X_list, y_list, method=''):
+        scores=[]
+        for X, y in zip(X_list, y_list):
+            y=np.asarray(y)
+            prev_pred=self.predict(X,method)
+            prev_true=self._classify_and_count(y)
+            #print(prev_pred, prev_true)
+            #scores.append(self._divergence_bin(prev_true, prev_pred, self._kld))
+            scores.append(self._emd(prev_true, prev_pred))
         return np.average(scores)
 
     def make_drift_rnd(X,y,proportion=0.5):
@@ -234,9 +246,19 @@ class Quantification:
         return np.sum(np.where(p != 0,np.abs(q-p)/p, 0))
 
     def _ae(self, p, q):
+        #Absolute error
         p = np.asarray(p, dtype=np.float)
         q = np.asarray(q, dtype=np.float)
         return np.average(np.abs(q-p))
+
+    def _emd(self,p,q):
+        #Earth Mover’s Distance (Rubner et al., 2000)
+        p = np.asarray(p, dtype=np.float)
+        q = np.asarray(q, dtype=np.float)
+        emd=0
+        for i in range(1,len(p)):
+            emd+=np.abs(np.sum(q[0:i])-np.sum(p[0:i]))
+        return emd
 
     def _divergence_bin(self,p,q,func=''):
         if func=='':func=self._kld
@@ -499,78 +521,73 @@ class Quantification:
             f.close()
         return [_y, _y1_list, _prob_list, self._test_files, y_names]
 
-    def _prob_classify_and_count(self, pred_prob_list):
-        avr_prob=[]
-        for pred_prob in pred_prob_list:
-            avr_prob=np.concatenate((avr_prob,np.average(pred_prob, axis=0)))
+    def _prob_classify_and_count(self, pred_prob):
+        #avr_prob=[]
+        #for pred_prob in pred_prob_list:
+        #    avr_prob=np.concatenate((avr_prob,np.average(pred_prob, axis=0)))
         #print('PCC',avr_prob)
-        return avr_prob
+        return np.average(pred_prob, axis=0)
 
-    def _exp_max(self, y_train, pred_prob_list, stop_delta=0.1):
+    def _exp_max(self, y_train, pred_prob, stop_delta=0.1):
         pr_train=self._bin_prevalence(y_train)
         pr_all=[]
-        for pred_prob in pred_prob_list:
-            #print('pred_prob')
-            pr_s=pr_train.copy()
-            prob_t=pred_prob.T
-            prob_t_s =prob_t.copy()
-            delta=1
-            delta_s=1
-            while delta>stop_delta and delta<=delta_s:
-                for cl_n in range(len(pr_train)):#Category
-                    prob_t_s[cl_n]=prob_t[cl_n].copy()*(pr_s[cl_n]/pr_train[cl_n])  #E step
-                prob_t_s=normalize(prob_t_s, norm='l1',axis=0)                      #E step
-                pr_s1=np.average(prob_t_s, axis=1)                                  #M step
-                #pr_s1=self._adj_classify_and_count([prob_t_s.transpose()],is_prob=True)
-                delta_s=delta
-                #delta=np.max(np.abs(pr_s1-pr_s))
-                delta=self._ae(pr_s,pr_s1)
-                #print('pr_s1',pr_s1, delta)
-                #print(prob_t_s)
-                #pr_train=pr_s.copy()
-                #prob_t=prob_t_s.copy()
-                pr_s=pr_s1.copy()
-            if np.max(pr_s)>0.99: pr_s=np.average(prob_t, axis=1)
-            pr_all=np.concatenate((pr_all,pr_s.copy()), axis=1)
-        return pr_all
+        pr_s=pr_train.copy()
+        prob_t=pred_prob.T
+        prob_t_s =prob_t.copy()
+        delta=1
+        delta_s=1
+        count=0
+        while delta>stop_delta and delta<=delta_s and count<100:
+            for cl_n in range(len(pr_train)):#Category
+                prob_t_s[cl_n]=prob_t[cl_n].copy()*(pr_s[cl_n]/pr_train[cl_n])  #E step
+            prob_t_s=normalize(prob_t_s, norm='l1',axis=0)                      #E step
+            pr_s1=np.average(prob_t_s, axis=1)                                  #M step
+            #pr_s1=self._adj_classify_and_count([prob_t_s.transpose()],is_prob=True)
+            delta_s=delta
+            #delta=np.max(np.abs(pr_s1-pr_s))
+            delta=self._ae(pr_s,pr_s1)
+            #print('pr_s1',pr_s1, delta)
+            #print(prob_t_s)
+            #pr_train=pr_s.copy()
+            #prob_t=prob_t_s.copy()
+            pr_s=pr_s1.copy()
+            count=count+1
+        if np.max(pr_s)>0.99: pr_s=np.average(prob_t, axis=1)
+        return pr_s
 
-    def _expectation_maximization(self, y_train, pred_prob_list, stop_delta=0.1):#_indexes
+    def _expectation_maximization(self, y_train, pred_prob, stop_delta=0.1):#_indexes
         #[y_train, y_test_list, pred_prob_list, test_files, y_names]=_indexes
         #print(pred_prob_list[0][1])
         pr_train=self._bin_prevalence(y_train)
         pr_all=[]
         num_iter=[]
         test_num=0#0..3 len(_y_test_list)
-        for pred_prob in pred_prob_list:# Test sets loop
-            #print('Test set N', _test_num)
-            pr_c=pr_train.copy()
+        pr_c=pr_train.copy()
 
-            prob=pred_prob.T
-            for cl_n in range(len(pr_train)):#Category
-                #print('Test set N %s, class number %s' %(test_num, cl_n))
-                iter=0
-                _delta=1
-                while _delta>stop_delta:
-                    pr_c_x=[]
-                    _j=0
-                    for pr_c_xk in prob[cl_n]:#xk in category c
-                #Step E
-                        pr_c_x_k=(pr_c[cl_n]/pr_train[cl_n]*pr_c_xk)/(((1-pr_c[cl_n])/(1-pr_train[cl_n]))*(1-pr_c_xk)+pr_c[cl_n]/pr_train[cl_n]*pr_c_xk)
-                        pr_c_x.append(pr_c_x_k)
-                        _j+=1
-                #Step M
-                    pr_c_new=np.average(pr_c_x)#np.average(_prob[cl_n])
-                    _delta=np.abs(pr_c_new-pr_c[cl_n])
-                    #print('_delta',_delta)
-                    #pr_train[cl_n]=pr_c[cl_n]
-                    #prob[cl_n]=pr_c_x_k
-                    pr_c[cl_n]=pr_c_new
-                    iter+= 1
-                num_iter.append(iter)
-                if np.max([pr_c[cl_n],1-pr_c[cl_n]])>0.99: pr_c[cl_n]=np.average(prob[cl_n])
-            pr_all=np.concatenate((pr_all,pr_c), axis=1)
-            test_num+=1
-        return pr_all #,num_iter
+        prob=pred_prob.T
+        for cl_n in range(len(pr_train)):#Category
+            #print('Test set N %s, class number %s' %(test_num, cl_n))
+            iter=0
+            _delta=1
+            while _delta>stop_delta:
+                pr_c_x=[]
+                _j=0
+                for pr_c_xk in prob[cl_n]:#xk in category c
+            #Step E
+                    pr_c_x_k=(pr_c[cl_n]/pr_train[cl_n]*pr_c_xk)/(((1-pr_c[cl_n])/(1-pr_train[cl_n]))*(1-pr_c_xk)+pr_c[cl_n]/pr_train[cl_n]*pr_c_xk)
+                    pr_c_x.append(pr_c_x_k)
+                    _j+=1
+            #Step M
+                pr_c_new=np.average(pr_c_x)#np.average(_prob[cl_n])
+                _delta=np.abs(pr_c_new-pr_c[cl_n])
+                #print('_delta',_delta)
+                #pr_train[cl_n]=pr_c[cl_n]
+                #prob[cl_n]=pr_c_x_k
+                pr_c[cl_n]=pr_c_new
+                iter+= 1
+            num_iter.append(iter)
+            if np.max([pr_c[cl_n],1-pr_c[cl_n]])>0.99: pr_c[cl_n]=np.average(prob[cl_n])
+        return pr_c #,num_iter
 
     def _cost_sens_learning(self, X_test, stop_delta=0.00001, class_weight_start='auto'):
         pred_prev_train=self._classify_and_count(self.y_train)
@@ -596,16 +613,18 @@ class Quantification:
             #pred_prev2=self._classify_and_count(model.predict(X_test))#
             delta1=delta2
             delta2=self._ae(pred_prev1,pred_prev2)
-            d_delta1=d_delta2
-            d_delta2=abs(delta2-delta1)
-            if d_delta2>d_delta1 and d_delta1!=0:
-                print('dd',d_delta1, d_delta2)
-            #print(pred_prev2[0],'\t', delta1)
-            if delta2<stop_delta:
+            d_delta3=abs(delta2-delta1)
+            if delta2<stop_delta or d_delta3>d_delta2 and d_delta2>d_delta1 and d_delta1!=0:
+                #print('dd',d_delta1, d_delta2,d_delta3)
                 break
+            d_delta1=d_delta2
+            d_delta2=d_delta3
+            #print(pred_prev2[0],'\t', delta1)
+            #if delta2<stop_delta:
+            #    break
             pred_prev0=pred_prev1.copy()
             pred_prev1=pred_prev2.copy()
-        #print(pred_prev1)
+        #print('pred_prev1',pred_prev1)
         return pred_prev1
 
     def __conditional_probability(self,p1,p2,val1,val2):
@@ -713,27 +732,25 @@ class Quantification:
             #print('tp, fp by prob', tp_av, fp_av)
         return [tp_av, fp_av]
 
-    def _adj_classify_and_count(self, y_pred_list, is_prob=False):
+    def _adj_classify_and_count(self, y_pred, is_prob=False):
         [tp_av, fp_av]=self.kfold_results
-        pred_conc=[]
-        for y_pred in y_pred_list:
-            if is_prob:
-                pr=np.average(y_pred,axis=0)
+
+        if is_prob:
+            pr=np.average(y_pred,axis=0)
+        else:
+            pr=self.method_prev(y_pred)
+        try:
+            pred=(pr-fp_av)/(tp_av-fp_av)
+            if np.min(pred)>=0:
+                pred=normalize(pred, norm='l1', axis=1)[0]
             else:
-                pr=self.method_prev(y_pred)
-            try:
-                pred=(pr-fp_av)/(tp_av-fp_av)
-                if np.min(pred)>=0:
-                    pred=normalize(pred, norm='l1', axis=1)[0]
-                else:
-                    print(pred)
-                    print(pr,tp_av,fp_av)
-                    pred=pr
-            except:
-                print(pr,tp_av,fp_av)
+                #print(pred)
+                #print(pr,tp_av,fp_av)
                 pred=pr
-            pred_conc=np.concatenate((pred_conc, pred), axis=1)
-        return pred_conc
+        except:
+            print(pr,tp_av,fp_av)
+            pred=pr
+        return pred
 
     def _process_pipeline(self):
         #Warning! Processing can takes a long period. We recommend to perform it step by step
