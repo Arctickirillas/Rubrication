@@ -48,10 +48,11 @@ def gen_texts():
     dataset = fetch_20newsgroups(subset='all', categories=categories, shuffle=True, random_state=42)
     labels = dataset.target
     return dataset.data, labels
+
 class text_processing():
     def __init__(self):
         self.__tok=TfidfVectorizer().build_tokenizer()
-        self.tfidf_ngrams=TfidfVectorizer(tokenizer=self.__tokenize, preprocessor=None,ngram_range=(1,1),
+        self.tfidf_ngrams=TfidfVectorizer(tokenizer=self.__tokenize, preprocessor=self.__preprocessor,ngram_range=(1,1),
                                      analyzer="word" ,binary=False, stop_words='english', lowercase=False)
 
     def __tokenize(self, text):
@@ -79,7 +80,7 @@ class text_processing():
         return lemms
 
     def __preprocessor(self, text):
-        print(text)
+        #print(text)
         return text
 
     def fit_transform(self, texts):
@@ -147,9 +148,6 @@ def test_gen_data():
     print(np.average(CC),'\t',np.average(PCC),'\t',np.average(ACC),'\t',np.average(PACC),'\t',np.average(EM1),'\t',np.average(EM),'\t',np.average(SVMp),'\t',np.average(Iter),'\t',np.average(Iter1),'\t\t\t',
           np.var(CC),'\t',np.var(PCC),'\t',np.var(ACC),'\t',np.var(PACC),'\t',np.var(EM1),'\t',np.var(EM),'\t',np.var(SVMp),'\t',np.var(Iter),'\t',np.var(Iter1),'\t\t\t',
           k_CC,'\t',k_PCC,'\t',k_ACC,'\t',k_PACC,'\t',k_EM1,'\t',k_EM,'\t',k_SVMp,'\t',k_Iter)
-
-def write_semeval(fname):
-    pass
 
 def split_by_topic(X_test, y_test, topics):
     X_test=X_test.toarray()
@@ -236,9 +234,38 @@ def semEval():
     print('Iter1',q.score(X_test_list,y_test_list, method='Iter1'))
     print('ACC',q.score(X_test_list,y_test_list, method='ACC'))
     print('PACC',q.score(X_test_list,y_test_list, method='PACC'))
+from sklearn.svm import LinearSVC, SVC
+def semEvalP():
+    #fname='100_topics_XXX_tweets.topic-two-point.subtask-BD'
+    fname='100_topics_100_tweets.topic-five-point.subtask-CE'
+    #fname='100_topics_100_tweets.sentence-three-point.subtask-A'
 
+    train=read_semeval('texts/2download/gold/train/'+fname+'.train.gold.tsv')
+    tp=text_processing()
+    X_train=tp.fit_transform(train[0])#.toarray()
+    y_train=np.asarray(train[1])
+
+    test=read_semeval('texts/2download/gold/devtest/'+fname+'.dev.gold.tsv')
+
+    X_test=tp.transform(test[0])#.toarray()
+    y_test=np.asarray(test[1])
+
+    q=Quantification(method='Iter',is_clean=True)
+    q.fit(X_train,y_train)
+    prev=q.predict(X_test)
+    print(prev)
+
+    #svm=SVC(probability=True)
+    #svm.fit(X_train,y_train)
+    #prob=svm.predict_proba(X_test)
+    #print(prob)
+    topics=test[2]
+    print(len(topics))
+    print(X_test.shape)
+    print(y_test.shape)
 #quantify_OHSUMED()
 #test_gen_data()
 #semEval()
-q=Quantification(method='CC')
-print(np.average([q._emd([0.0,0.11,0.5,0.29,0.100],[0.0,0.11,0.5,0.2,0.19]), q._emd([0.2,0.25,0.5,0.05,0.0],   [0.0,0.25,0.4,0.15,0.2])]))
+semEvalP()
+#q=Quantification(method='CC')
+#print(np.average([q._emd([0.0,0.11,0.5,0.29,0.100],[0.0,0.11,0.5,0.2,0.19]), q._emd([0.2,0.25,0.5,0.05,0.0],   [0.0,0.25,0.4,0.15,0.2])]))
