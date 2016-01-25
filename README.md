@@ -5,30 +5,30 @@ Download parse_arff.py and quantification.py
 
 #Examples:
 
->>> import numpy as np
+import numpy as np
 
->>> from quantification import Quantification
+from quantification import Quantification
 
->>> X = np.array([[-1, -1], [-2, -1], [1, 1], [2, 1]])
+X = np.array([[-1, -1], [-2, -1], [1, 1], [2, 1]])
 
->>> y = np.array([1, 1, 2, 2])
+y = np.array([1, 1, 2, 2])
 
->>> q=Quantification(method='CC')
+q=Quantification(method='CC')
 
->>> q.fit(X, y)
+q.fit(X, y)
 
->>> print(q.predict([[-0.8, -1],[0.9, 1.1]]))
+print(q.predict([[-0.8, -1],[0.9, 1.1]]))
 
-[0.5, 0.5]
+> [0.5, 0.5]
 
->>> print(q.score([[[-0.8, -1],[0.9, 1.1]]], [[1, 2]]))
+print(q.score([[-0.8, -1],[0.9, 1.1]], [1, 2]))
 
-0.0
+> 0.0
 
 #Methods:
 ## __init__(method='CC')
 
-Parameter method: string, optional (default='CC'). It must be one of 'CC', 'ACC', 'PCC', 'PACC', 'EM', 'EM1', '', 'test'.
+Parameter method: string, optional (default='CC'). It must be one of 'CC', 'ACC', 'PCC', 'PACC', 'EM', 'EM1', 'Iter', 'Iter1', '', 'test'.
 
 ## fit(X, y)
 
@@ -44,16 +44,15 @@ Parameter method: string, optional (default value from constructor). It must be 
 
 Returns: predicted prevalence.
 
-## score(list_of_X, list_of_y, method='CC')
+## score(X, y, method='CC')
 
-Parameter list_of_X: Test set of feature vectors [X1, X2]
+Parameter X: Test feature vectors X
 
-Parameter list_of_y: Test set of original labels [y1, y2]
+Parameter y: Test labels y
 
 Parameter method: string, optional (default value from constructor). It must be one of 'CC', 'ACC', 'PCC', 'PACC', 'EM', 'EM1'.
 
-Returns: average over test sets value of Kullback-Leibler divergences between original and predicted prevalences.
-np.average([KLD(pr_orig_1,pr_pred_1),KLD(pr_orig_2,pr_pred_2)])
+Returns: average value of Kullback-Leibler divergences between original and predicted prevalences. KLD(pr_orig,pr_pred)
 
 
 #Install datasets RCV1 and OHSUMED
