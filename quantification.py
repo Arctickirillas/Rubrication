@@ -23,12 +23,12 @@ import random
 class Quantification:
     def __classificator(self, class_weight='auto'):
         if class_weight=='':
-            return SVC(kernel='rbf', probability=True)
-            #return linear_model.LogisticRegression()
+            #return SVC(kernel='rbf', probability=True)
+            return linear_model.LogisticRegression()
             #return GMM(n_components=2)
         else:
-            return SVC(kernel='rbf', probability=True, class_weight = class_weight)
-            #return linear_model.LogisticRegression(class_weight=class_weight)
+            #return SVC(kernel='rbf', probability=True, class_weight = class_weight)
+            return linear_model.LogisticRegression(class_weight=class_weight)
             #return GMM(n_components=2)
 
     def __init__(self, method='', dir_name='temp', is_clean=True):

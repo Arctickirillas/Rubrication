@@ -96,7 +96,7 @@ def SVMperf():
     sleep(1)
     predict = subprocess.Popen(["svm-perf-original/svm_perf_classify","SemEval/test.txt","SemEval/model.txt","SemEval/predictions.txt"], stdout=subprocess.PIPE)
     sleep(1)
-    print predict.communicate()[0]
+    print(predict.communicate()[0])
 
 
 def obtainPredictedAndTweets(tweetData):
@@ -236,6 +236,7 @@ def getOutData(q, topic, name = 'out'):
     neg = 0.
     pos = 0.
     file = open (str(name)+'.output','w')
+    prev_list={}
     for i in range(len(q)):
         if top==topic[i]:
             if q[i]==1:
@@ -246,6 +247,7 @@ def getOutData(q, topic, name = 'out'):
         else:
             if top!='':
                 file.write(str(top)+'\t'+str(float(pos/countOfTop))+'\t'+str(float(neg/countOfTop)) + '\n')
+                prev_list[str(top)]=[float(pos/countOfTop),float(neg/countOfTop)]
             top = topic[i]
             pos = 0.
             neg =0.
@@ -255,7 +257,9 @@ def getOutData(q, topic, name = 'out'):
                 neg += 1
             countOfTop = 1
     file.write(str(top)+'\t'+str(float(pos/countOfTop))+'\t'+str(float(neg/countOfTop)) + '\n')
+    prev_list[str(top)]=[float(pos/countOfTop),float(neg/countOfTop)]
     file.close()
+    return prev_list
 
 
 # getOutData(qq,topicTest,'test_out')
@@ -275,12 +279,12 @@ p = getRealValue("SemEval/data/five-point/test(2).txt")
 p = q.CCforDouble(p)
 qq = getPredictionsOption("SemEval/SVMperf/five-point/predictions(2)_(2).txt",option)
 qq = q.CCforDouble(qq)
-print kld(p,qq)
+print(kld(p,qq))
 option = -1.
 _kld = 1.
 def preFunc():
     for i in range(-2,3,1):
-        print i
+        print(i)
 preFunc()
 # while option<1.3:
 #
@@ -324,8 +328,8 @@ p = q.CCforDouble(sentimentTest)
 
 
 #
-print kld(p,qq)
-print kld(p,qq_prob)
+print(kld(p,qq))
+print(kld(p,qq_prob))
 
 
 
@@ -348,6 +352,6 @@ for line in f:
 
 qq = q.CCforDouble(qq)
 
-print qq
+print(qq)
 
-print kld(p,qq)
+print(kld(p,qq))

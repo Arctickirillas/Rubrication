@@ -67,12 +67,12 @@ class SVMperf():
             file.close()
 
     def fitSVMperf(self, trainData, model = 'model.txt'):
-        subprocess.Popen(["svm-perf-original/svm_perf_learn","-c","20",trainData,model], stdout=subprocess.PIPE)
+        subprocess.Popen(["svm_kld/svm-perf-original/svm_perf_learn","-c","20",trainData,model], stdout=subprocess.PIPE)
         sleep(1)
         return model
 
     def predictSVMperf(self, testData, model, predictions = 'predictions.txt'):
-        self.description = subprocess.Popen(["svm-perf-original/svm_perf_classify",testData,model,predictions], stdout=subprocess.PIPE)
+        self.description = subprocess.Popen(["svm_kld/svm-perf-original/svm_perf_classify",testData,model,predictions], stdout=subprocess.PIPE)
         sleep(1)
         return predictions
 
@@ -83,9 +83,9 @@ class SVMperf():
         q = []
         f = open(self.predictions,'r')
         for line in f:
-            if float(line) >= 0 :
+            if float(line) >= 0.62 :
                 q.append(1)
-            elif float(line) < 0:
+            else:
                 q.append(0)
         f.close()
         return  np.array(q)

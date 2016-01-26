@@ -171,7 +171,7 @@ def test_gen_data():
           k_CC,'\t',k_PCC,'\t',k_ACC,'\t',k_PACC,'\t',k_EM1,'\t',k_EM,'\t',k_SVMp,'\t',k_Iter)
 
 def split_by_topic(X_test, y_test, topics):
-    X_test=X_test.toarray()
+    #X_test=X_test.toarray()
     test_index, X_test_list, y_test_list = [], [], []
     utopics=np.unique(topics)
     for topic in utopics:
@@ -198,7 +198,10 @@ def read_semeval(fname='texts/2download/gold/dev/100_topics_100_tweets.sentence-
     for line in t:
         substr=line.split('\t')
         texts.append(substr[-1])
-        marks.append(substr[-2])
+        try:
+            marks.append(int(substr[-2]))
+        except:
+            marks.append(substr[-2])
         ids.append(substr[0])
         if len(substr)>3:
             topics.append(substr[-3])
@@ -209,9 +212,10 @@ def read_semeval(fname='texts/2download/gold/dev/100_topics_100_tweets.sentence-
     marks_num=[]
     for mark in marks:
         marks_num.append(name_dict[mark])
-    return texts, marks_num, topics
+    return texts, marks_num, topics, ids
 
 def write_semeval(pdict,fname):
+    #print({val:key for key, val in cat_names.items()})
     pstr=''
     for key in pdict:
         pstr=pstr+'%s'%key
@@ -219,35 +223,87 @@ def write_semeval(pdict,fname):
             st_val='%0.8f'%val
             pstr=pstr+'\t'+st_val[1:]
         pstr=pstr+'\n'
-    with open('texts/2download/test_datasets/'+fname+'.pred.txt', 'w') as f:
+    with open('texts/2download/output/'+fname+'.pred.txt', 'w') as f:
         f.write(pstr)
         f.close()
     #print(pstr)
 
-def semEval():
-    fname='100_topics_100_tweets.sentence-three-point.subtask-A'
-    fname='100_topics_100_tweets.topic-five-point.subtask-CE'
-    #fname='100_topics_XXX_tweets.topic-two-point.subtask-BD'
+def getOutData(q, topic, name = 'out'):
+    top = ''
+    countOfTop = 1.
+    neg = 0.
+    pos = 0.
+    file = open (str(name)+'.output','w')
+    prev_list={}
+    for i in range(len(q)):
+        if top==topic[i]:
+            if q[i]==1:
+                pos += 1
+            else:
+                neg += 1
+            countOfTop += 1
+        else:
+            if top!='':
+                file.write(str(top)+'\t'+str(float(pos/countOfTop))+'\t'+str(float(neg/countOfTop)) + '\n')
+                prev_list[str(top)]=[float(neg/countOfTop),float(pos/countOfTop)]
+            top = topic[i]
+            pos = 0.
+            neg =0.
+            if q[i]==1:
+                pos += 1
+            else:
+                neg += 1
+            countOfTop = 1
+    file.write(str(top)+'\t'+str(float(pos/countOfTop))+'\t'+str(float(neg/countOfTop)) + '\n')
+    prev_list[str(top)]=[float(neg/countOfTop),float(pos/countOfTop)]
+    file.close()
+    return prev_list
 
+from SVMperfRealization import *
+def forSVMperf(q,y_train,topics,y_test_list,utopics):
+    pred_prev=getOutData(y_train,topics)
+
+    dist_list=[]
+    real_prev=[]
+    for y_test in y_test_list:
+        real_prev.append(q._classify_and_count(y_test))
+    for i,topic in enumerate(utopics):
+        print(real_prev[i],pred_prev[topic])
+        dist_list.append(q._emd(real_prev[i],pred_prev[topic]))
+    print(np.average(dist_list))
+
+def semEval():
+
+    #fname='100_topics_100_tweets.sentence-three-point.subtask-A'
+    #fname='100_topics_100_tweets.topic-five-point.subtask-CE'
+    fname='100_topics_XXX_tweets.topic-two-point.subtask-BD'
+
+    #train=read_semeval('texts/2download/gold/all/'+fname+'.all.gold.tsv')
     train=read_semeval('texts/2download/gold/train/'+fname+'.train.gold.tsv')
     tp=text_processing()
     X_train=tp.fit_transform(train[0])#.toarray()
     y_train=np.asarray(train[1])
 
+    #test=read_semeval('texts/2download/test_datasets/SemEval2016-task4-test.subtask-BCDE.txt')
     #test=read_semeval('texts/2download/gold/devtest/'+fname+'.devtest.gold.tsv')
     test=read_semeval('texts/2download/gold/dev/'+fname+'.dev.gold.tsv')
     X_test=tp.transform(test[0])#.toarray()
     y_test=np.asarray(test[1])
 
-    X_test_list, y_test_list, utopics=split_by_topic(X_test, y_test, test[2])
+    perf=SVMperf(x_train=X_train, y_train=y_train, x_test=X_test, y_test=y_test)
     #X_train, X_test, y_train, y_test=train_test_split(X_train,y_train, test_size=0.75)
+
+    X_test_list, y_test_list, utopics=split_by_topic(X_test, y_test, test[2])
+
     q=Quantification(method='Iter1',is_clean=True)
     #X_test, y_test=Quantification.make_drift_list(X_test.toarray(), y_test, proportion=0.2)
     q.fit(X_train, y_train)
     print('train',q._classify_and_count(y_train))
 
-    prevs=q.predict_set(X_test_list, method='PCC')
+    prevs=q.predict_set(X_test_list, method='Iter1')
     write_semeval(dict(zip(utopics,prevs)),fname=fname)
+
+    forSVMperf(q,y_test,test[2],y_test_list, utopics)
 
     print('CC',q.score(X_test_list,y_test_list, method='CC'))
     print('PCC',q.score(X_test_list,y_test_list, method='PCC'))
@@ -257,6 +313,7 @@ def semEval():
     print('Iter1',q.score(X_test_list,y_test_list, method='Iter1'))
     print('ACC',q.score(X_test_list,y_test_list, method='ACC'))
     print('PACC',q.score(X_test_list,y_test_list, method='PACC'))
+
 
 
 def bayes_calc(c_prev, c_prob, ):
