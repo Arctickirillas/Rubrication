@@ -16,6 +16,7 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from numpy import concatenate
 import pandas as pd
 import re
+from sklearn import metrics
 
 def generate_data(n_samples=1000):
     #X, y, p_c, p_w_c = make_ml_data(n_samples=1000, n_features=10,n_classes=3, n_labels=1,length=50, allow_unlabeled=False, return_indicator=True,return_distributions=True, sparse=True)
@@ -316,7 +317,7 @@ def semEval():
 
 
 
-def bayes_calc(c_prev, c_prob, ):
+def bayes_calc(c_prev, c_prob):
     res=[]
     for i in range(len(c_prob)):
             summ=0
@@ -378,9 +379,11 @@ def prob_to_scale(c_prob):
     scale_PN=["negative", "positive"]
     scale=[0,1,scale_PN,scale_three,0,scale_five]
     res=[]
+    res1=[]
     for i in range(len(c_prob)):
         res.append(scale[len(c_prob[i])][c_prob[i].index(max(c_prob[i]))])
-    return res
+        res1.append(c_prob[i].index(max(c_prob[i])))
+    return res, res1
 
 def semEvalP():
     #task_in_process="A"
@@ -429,12 +432,12 @@ def semEvalP():
     prob=svm.predict_proba(X_test)
 
     #Вывод результатов в файл без учета априорных вероятностей
-    new_labels=prob_to_scale(prob.tolist())
+    #new_labels, test_labels=prob_to_scale(prob.tolist())
 
     #Учет априорных вероятностей попадания в класс:
     b_prob=bayes_calc(prev, prob)
-    new_labels=prob_to_scale(b_prob)
-    s=write_TaskA(test[3], new_labels)
+    new_labels, test_labels=prob_to_scale(b_prob)
+    #s=write_TaskA(test[3], new_labels)
 
 
     if (task_in_process=="A"):
@@ -444,6 +447,7 @@ def semEvalP():
     elif (task_in_process=="D" or task_in_process=="E"):
         s=write_TaskDE(fname,task_in_process, utopics.tolist(), prevED)
     print(s)
+    metrics.classification_report(y_test, test_labels)
 
 
 #quantify_OHSUMED()
