@@ -10,7 +10,6 @@ from sklearn.preprocessing import normalize, Normalizer
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn import metrics
 from scipy.sparse import csr_matrix
-from sklearn.svm import LinearSVC, SVC
 from sklearn.multiclass import OneVsRestClassifier as mc
 from scipy import stats
 from scipy.sparse import csr_matrix
@@ -19,6 +18,7 @@ from sklearn.mixture import GMM, VBGMM
 import os
 import scipy
 import random
+from sklearn.svm import LinearSVC, SVC
 
 class Quantification:
     def __classificator(self, class_weight='auto'):
@@ -617,6 +617,7 @@ class Quantification:
             d_delta3=abs(delta2-delta1)
             if delta2<stop_delta or d_delta3>d_delta2 and d_delta2>d_delta1 and d_delta1!=0:
                 #print('dd',d_delta1, d_delta2,d_delta3)
+                self.iter_model=model
                 break
             d_delta1=d_delta2
             d_delta2=d_delta3
@@ -626,46 +627,8 @@ class Quantification:
             pred_prev0=pred_prev1.copy()
             pred_prev1=pred_prev2.copy()
         #print('pred_prev1',pred_prev1)
+        self.iter_model=model
         return pred_prev1
-
-    def cost_sens_learning_out(self, X_test, stop_delta=0.00001, class_weight_start='auto'):
-        pred_prev_train=self._classify_and_count(self.y_train)
-        pred_prev0=pred_prev_train.copy()
-        model=self.__classificator(class_weight=class_weight_start)#class_weight={0:1,1:1})##
-        model.fit(self.X_train, self.y_train)
-        pred_prev1=np.average(model.predict_proba(X_test), axis=0)#
-        #pred_prev1=self._classify_and_count(model.predict(X_test))
-        delta1=0
-        delta2=0
-        d_delta1=0
-        d_delta2=0
-        for i in range(10):
-            #print('pred_prev0',pred_prev0)
-            #print('pred_prev1',pred_prev1)
-            #print(pred_prev1/pred_prev_train)
-            #print(delta2)
-            class_weight=dict(zip(self.classes, pred_prev1/pred_prev_train))
-
-            model=self.__classificator(class_weight=class_weight)
-            model.fit(self.X_train, self.y_train)
-            pred_prev2=np.average(model.predict_proba(X_test), axis=0)#
-            #pred_prev2=self._classify_and_count(model.predict(X_test))#
-            delta1=delta2
-            delta2=self._ae(pred_prev1,pred_prev2)
-            d_delta3=abs(delta2-delta1)
-            if delta2<stop_delta or d_delta3>d_delta2 and d_delta2>d_delta1 and d_delta1!=0:
-                #print('dd',d_delta1, d_delta2,d_delta3)
-                break
-            d_delta1=d_delta2
-            d_delta2=d_delta3
-            #print(pred_prev2[0],'\t', delta1)
-            #if delta2<stop_delta:
-            #    break
-            pred_prev0=pred_prev1.copy()
-            pred_prev1=pred_prev2.copy()
-
-        #print('pred_prev1',pred_prev1)
-        return model.predict(X_test),pred_prev1
 
     def __conditional_probability(self,p1,p2,val1,val2):
         c=0

@@ -17,6 +17,7 @@ from numpy import concatenate
 import pandas as pd
 import re
 from sklearn import metrics
+from sklearn.svm import LinearSVC, SVC
 
 def generate_data(n_samples=1000):
     #X, y, p_c, p_w_c = make_ml_data(n_samples=1000, n_features=10,n_classes=3, n_labels=1,length=50, allow_unlabeled=False, return_indicator=True,return_distributions=True, sparse=True)
@@ -54,28 +55,36 @@ def gen_texts():
 class text_processing():
     def __init__(self):
         self.__tok=TfidfVectorizer().build_tokenizer()
-        self.tfidf_ngrams=TfidfVectorizer(tokenizer=self.__tokenize, preprocessor=self.__preprocessor,ngram_range=(1,1),
+        self.tfidf_ngrams=TfidfVectorizer(tokenizer=self.__tokenize, preprocessor=self.__preprocessor,ngram_range=(1,4),
                                      analyzer="word" ,binary=False, stop_words='english', lowercase=False)
 
     def __tokenize(self, text):
         if text.lower()!='not available\n':
             lemms=[]
-            #stems = []
             wnl = WordNetLemmatizer()
             #st = PorterStemmer()
             for item in self.__tok(text):
                 if item.isalpha():
                     lemms.append(wnl.lemmatize(item.lower()))
-                    #stems.append(st.stem(item))
+                    #lemms.append(st.stem(item.lower()))
                 else:
                     if item.isdigit():
-                        if int(item)>=1800 and int(item)<=2100:
+                        if int(item)>=1700 and int(item)<=2100:
                             lemms.append('YEAR')
                         else:
                             lemms.append('DIGIT')
                     else:
-                        pass
-                        #print(item)
+                        #pass
+                        lemms.append(item)
+                        if item[-2:]=='th' and item[:-2].isdigit() or item[-2:]=='st' and item[:-2].isdigit() or item[-2:]=='nd'and item[:-2].isdigit() or item[-2:]=='rd'and item[:-2].isdigit():
+                            lemms.append('ORDERNUM')
+                        elif item[-2:]=='pm' and item[:-2].isdigit() or item[-2:]=='am' and item[:-2].isdigit():
+                            lemms.append('HOUR')
+                        elif item=='4EXCL' or item=='5QUEST' or item=='6POINT':
+                            lemms.append(item)
+                        else:
+                            lemms.append('NAME_NAME')
+                            #print(item)
         else:
             lemms=[]
         #print(lemms)
@@ -85,6 +94,7 @@ class text_processing():
         patterns = [
 #link
                 ("https?:\/\/\S*"," HTTPLNK "),
+#                ("@[\w_-]+", " SOME_USER "),
 #smile
                 (":\)*\)", " SMILELOO "),
                 (";\)*\)","  SMILELOO "),
@@ -98,9 +108,52 @@ class text_processing():
                 (":\(*\(","  FROWNLO "),
                 (":-\(*\(","  FROWNLO "),
 #several exclamations, quetsions, points
-                ("\!\!*\!"," 4EXCL "),
-                ("\?\?*\?"," 5QUEST "),
-                ("\.\.\.*\."," 6POINT ")]
+                ("\!*\!"," 4EXCL "),
+                ("\?*\?"," 5QUEST "),
+                ("\.*\."," 3POINT "),
+#negation
+                ("n't","n not")
+        ]
+        for pat, sub in patterns:
+            text=re.sub(pat, sub, text) #замена последовательная, порядок в паттерне имеет значение
+        return text
+
+    def fit_transform(self, texts):
+
+        return self.tfidf_ngrams.fit_transform(texts)
+
+    def transform(self, raw_documents):
+        return self.tfidf_ngrams.transform(raw_documents)
+
+class char_processing():
+    def __init__(self):
+        self.__tok=TfidfVectorizer().build_tokenizer()
+        self.tfidf_ngrams=TfidfVectorizer(preprocessor=self.__preprocessor,ngram_range=(3,5),
+                                     analyzer="char" ,binary=False, stop_words='english', lowercase=True)
+    def __preprocessor(self, text):
+        patterns = [
+#link
+                ("https?:\/\/\S*"," HTTPLNK "),
+#                ("@[\w_-]+", " SOME_USER "),
+#smile
+                (":\)*\)", " SMILELOO "),
+                (";\)*\)","  SMILELOO "),
+                (";-\)*\)"," SMILELOO "),
+                (":\]*\]"," SMILELOO "),
+                ("=D[^a-z^1-9$]"," SMILELOO "),
+                (";D[^a-z^1-9^$]"," SMILELOO "),
+                (":D[^a-z^1-9^$]"," SMILELOO "),
+                (":-D[^a-z^1-9^$]"," SMILELOO "),
+#frown
+                (":\(*\(","  FROWNLO "),
+                (":-\(*\(","  FROWNLO "),
+#several exclamations, quetsions, points
+                ("\!*\!"," 4EXCL "),
+                ("\?*\?"," 5QUEST "),
+                ("\.*\."," 3POINT "),
+#negation
+                ("n't","n not")
+        ]
         for pat, sub in patterns:
             text=re.sub(pat, sub, text) #замена последовательная, порядок в паттерне имеет значение
         return text
@@ -273,25 +326,45 @@ def forSVMperf(q,y_train,topics,y_test_list,utopics):
         dist_list.append(q._emd(real_prev[i],pred_prev[topic]))
     print(np.average(dist_list))
 
+def predict_set(q, X_list, y_list, method=''):
+    scores=[]
+    ind_pred=[]
+    ind_real=[]
+    for i,X in enumerate(X_list):
+        prev_pred=q.predict(X,method)
+        scores.append(prev_pred)
+        for item in q.iter_model.predict(X):
+            ind_pred.append(item)
+        for item in y_list[i]:
+            ind_real.append(item)
+    res=metrics.classification_report(ind_real,ind_pred)
+    print(res)
+    return scores
+
 def semEval():
 
     #fname='100_topics_100_tweets.sentence-three-point.subtask-A'
-    #fname='100_topics_100_tweets.topic-five-point.subtask-CE'
-    fname='100_topics_XXX_tweets.topic-two-point.subtask-BD'
+    fname='100_topics_100_tweets.topic-five-point.subtask-CE'
+    #fname='100_topics_XXX_tweets.topic-two-point.subtask-BD'
 
-    #train=read_semeval('texts/2download/gold/all/'+fname+'.all.gold.tsv')
-    train=read_semeval('texts/2download/gold/train/'+fname+'.train.gold.tsv')
+    train=read_semeval('texts/2download/gold/all/'+fname+'.all.gold.tsv')
+    #train=read_semeval('texts/2download/gold/train/'+fname+'.train.gold.tsv')
     tp=text_processing()
-    X_train=tp.fit_transform(train[0])#.toarray()
+    cp=char_processing()
+    Xw_train=tp.fit_transform(train[0])
+    Xc_train=cp.fit_transform(train[0])
+    X_train=scipy.sparse.hstack((Xw_train, Xc_train), format='csr')
     y_train=np.asarray(train[1])
 
-    #test=read_semeval('texts/2download/test_datasets/SemEval2016-task4-test.subtask-BCDE.txt')
+    test=read_semeval('texts/2download/test_datasets/SemEval2016-task4-test.subtask-BCDE.txt')
     #test=read_semeval('texts/2download/gold/devtest/'+fname+'.devtest.gold.tsv')
-    test=read_semeval('texts/2download/gold/dev/'+fname+'.dev.gold.tsv')
-    X_test=tp.transform(test[0])#.toarray()
+    #test=read_semeval('texts/2download/gold/dev/'+fname+'.dev.gold.tsv')
+    Xw_test=tp.transform(test[0])
+    Xc_test=cp.transform(test[0])
+    X_test=scipy.sparse.hstack((Xw_test, Xc_test), format='csr')
     y_test=np.asarray(test[1])
 
-    perf=SVMperf(x_train=X_train, y_train=y_train, x_test=X_test, y_test=y_test)
+    #perf=SVMperf(x_train=X_train, y_train=y_train, x_test=X_test, y_test=y_test)
     #X_train, X_test, y_train, y_test=train_test_split(X_train,y_train, test_size=0.75)
 
     X_test_list, y_test_list, utopics=split_by_topic(X_test, y_test, test[2])
@@ -301,20 +374,20 @@ def semEval():
     q.fit(X_train, y_train)
     print('train',q._classify_and_count(y_train))
 
+    #prevs=predict_set(q, X_test_list, y_test_list, method='Iter1')
     prevs=q.predict_set(X_test_list, method='Iter1')
     write_semeval(dict(zip(utopics,prevs)),fname=fname)
-
-    forSVMperf(q,y_test,test[2],y_test_list, utopics)
+    #forSVMperf(q,y_test,test[2],y_test_list, utopics)
+    #q.iter_model.predict()
 
     print('CC',q.score(X_test_list,y_test_list, method='CC'))
-    print('PCC',q.score(X_test_list,y_test_list, method='PCC'))
-    print('EM',q.score(X_test_list,y_test_list, method='EM'))
-    print('EM1',q.score(X_test_list,y_test_list, method='EM1'))
-    print('Iter',q.score(X_test_list,y_test_list, method='Iter'))
-    print('Iter1',q.score(X_test_list,y_test_list, method='Iter1'))
-    print('ACC',q.score(X_test_list,y_test_list, method='ACC'))
-    print('PACC',q.score(X_test_list,y_test_list, method='PACC'))
-
+    #print('PCC',q.score(X_test_list,y_test_list, method='PCC'))
+    #print('EM',q.score(X_test_list,y_test_list, method='EM'))
+    #print('EM1',q.score(X_test_list,y_test_list, method='EM1'))
+    #print('Iter',q.score(X_test_list,y_test_list, method='Iter'))
+    #print('Iter1',q.score(X_test_list,y_test_list, method='Iter1'))
+    #print('ACC',q.score(X_test_list,y_test_list, method='ACC'))
+    #print('PACC',q.score(X_test_list,y_test_list, method='PACC'))
 
 
 def bayes_calc(c_prev, c_prob):
@@ -386,11 +459,11 @@ def prob_to_scale(c_prob):
     return res, res1
 
 def semEvalP():
-    #task_in_process="A"
+    task_in_process="A"
     #task_in_process="B"
     #task_in_process="C"
     #task_in_process="D"
-    task_in_process="E"
+    #task_in_process="E"
     if (task_in_process=="A"):
         fname='100_topics_100_tweets.sentence-three-point.subtask-A'
     elif (task_in_process=="C" or task_in_process=="E"):
@@ -412,17 +485,17 @@ def semEvalP():
 
     X_test_list, y_test_list, utopics=split_by_topic(X_test, y_test, test[2])
 
-    q=Quantification(method='Iter',is_clean=True)
+    q=Quantification(method='Iter1',is_clean=True)
     q.fit(X_train,y_train)
     prev=q.predict(X_test)
-    print(prev)
+    #print(prev)
 
-    if (task_in_process=="E"or task_in_process=="D"):
+    if (task_in_process=="C"or task_in_process=="D"):
         prevED=[]
         for i in range(len(utopics)):
             prevED.append(q.predict(X_test_list[i]))
-            print(utopics[i])
-            print(prevED)
+            #print(utopics[i])
+            #print(prevED)
 
     #print (prev[1])
     # вывод результатов
@@ -431,23 +504,47 @@ def semEvalP():
     svm.fit(X_train,y_train)
     prob=svm.predict_proba(X_test)
 
-    #Вывод результатов в файл без учета априорных вероятностей
-    #new_labels, test_labels=prob_to_scale(prob.tolist())
+    svmL=linear_model.LogisticRegression()
+    svmL.fit(X_train,y_train)
+    probL=svm.predict_proba(X_test)
 
+    for i in range(len(prob)):
+        for j in range(len(prob[0])):
+            prob[i][j]=(2*prob[i][j]+probL[i][j])/3
+
+    #Вывод результатов в файл без учета априорных вероятностей
+    new_labels, test_labels=prob_to_scale(prob.tolist())
+    res=metrics.classification_report(y_test, test_labels)
+    print(res)
     #Учет априорных вероятностей попадания в класс:
     b_prob=bayes_calc(prev, prob)
     new_labels, test_labels=prob_to_scale(b_prob)
     #s=write_TaskA(test[3], new_labels)
 
+    if (task_in_process=="B"or task_in_process=="C"):
+        new_labels=[]
+        for i in range(len(utopics)):
+            prob=svm.predict_proba(X_test_list[i])
+            new_labels, test_labels= prob_to_scale(prob.tolist())
+            res=metrics.classification_report(y_test_list[i], test_labels)
+            print(res)
+            print("Added Q")
+            b_prob=bayes_calc(prevED[i], prob)
+            new_labels,test_labels= prob_to_scale(b_prob)
+            #new_labels.append()
+            res=metrics.classification_report(y_test_list[i], test_labels)
+            print(res)
 
     if (task_in_process=="A"):
         s=write_TaskA(fname, task_in_process, test[3], new_labels)
+        res=metrics.classification_report(y_test, test_labels)
+        print(res)
     elif (task_in_process=="B" or task_in_process=="C"):
-        s=write_TaskBC(fname,task_in_process, test[3], test[2], new_labels)
+        s=1
+        #s=write_TaskBC(fname,task_in_process, test[3], test[2], new_labels)
     elif (task_in_process=="D" or task_in_process=="E"):
         s=write_TaskDE(fname,task_in_process, utopics.tolist(), prevED)
-    print(s)
-    metrics.classification_report(y_test, test_labels)
+    #print(s)
 
 
 #quantify_OHSUMED()
